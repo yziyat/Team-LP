@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { AppSettings, Bonus as BonusType, Employee, Team, User } from '../types';
 import { TRANSLATIONS } from '../constants';
@@ -121,8 +120,8 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
     ? employeesWithBonuses 
     : employeesWithBonuses.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  const startItem = itemsPerPage === 'all' ? 1 : (currentPage - 1) * itemsPerPage + 1;
-  const endItem = itemsPerPage === 'all' ? totalItems : Math.min(currentPage * itemsPerPage, totalItems);
+  const startItem = itemsPerPage === 'all' ? 1 : (currentPage - 1) * (itemsPerPage as number) + 1;
+  const endItem = itemsPerPage === 'all' ? totalItems : Math.min(currentPage * (itemsPerPage as number), totalItems);
 
   // Export Logic
   const handleExport = async (type: 'pdf' | 'image') => {
@@ -133,13 +132,13 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
           const doc = new jsPDF('landscape');
           doc.text("Bonus History", 14, 15);
           
-          const columns = [
+          const columns: { header: string; dataKey: string }[] = [
               { header: 'Employee', dataKey: 'name' },
               ...uniqueMonths.map(m => ({ header: m, dataKey: m }))
           ];
 
           const data = employeesWithBonuses.map(emp => {
-              const row: any = { name: `${emp.firstName} ${emp.lastName}` };
+              const row: Record<string, string | number> = { name: `${emp.firstName} ${emp.lastName}` };
               uniqueMonths.forEach(m => {
                   row[m] = getBonusAmount(emp.id, m);
               });
@@ -148,14 +147,14 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
 
           autoTable(doc, {
               head: [columns.map(c => c.header)],
-              body: data.map((row: any) => columns.map(c => row[c.dataKey])),
+              body: data.map((row) => columns.map(c => row[c.dataKey])),
               startY: 20,
               styles: { fontSize: 10 },
-              didParseCell: (data: any) => {
-                   if (data.section === 'body' && data.column.index > 0) {
-                        if (data.cell.raw) {
-                             data.cell.styles.textColor = [22, 163, 74]; // green-600
-                             data.cell.styles.fontStyle = 'bold';
+              didParseCell: (dataVal: any) => {
+                   if (dataVal.section === 'body' && dataVal.column.index > 0) {
+                        if (dataVal.cell.raw) {
+                             dataVal.cell.styles.textColor = [22, 163, 74]; // green-600
+                             dataVal.cell.styles.fontStyle = 'bold';
                         }
                    }
               }
