@@ -15,10 +15,32 @@ export const DEFAULT_SETTINGS: AppSettings = {
     { name: 'Nuit', start: '22:00', end: '06:00', color: '#8b5cf6' } // Purple
   ],
   assignments: ['Ressources Humaines', 'Informatique', 'Ventes', 'Marketing', 'Finance'],
-  absenceTypes: ['Repos', 'Récupération', 'Maladie', 'Absence', 'Formation', 'Congé'],
+  absenceTypes: [
+    { name: 'Repos', color: '#9ca3af' }, // Gray
+    { name: 'Récupération', color: '#6366f1' }, // Indigo
+    { name: 'Maladie', color: '#ef4444' }, // Red
+    { name: 'Absence', color: '#b91c1c' }, // Dark Red
+    { name: 'Formation', color: '#10b981' }, // Emerald
+    { name: 'Congé', color: '#14b8a6' } // Teal
+  ],
   holidays: [],
   dateFormat: 'DD/MM/YYYY',
   language: 'en' // Default to English
+};
+
+export const formatDisplayDate = (dateStr: string | undefined | null, format: string) => {
+  if (!dateStr) return '-';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return dateStr;
+
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+
+  if (format === 'MM/DD/YYYY') return `${month}/${day}/${year}`;
+  if (format === 'DD/MM/YYYY') return `${day}/${month}/${year}`;
+  // Default YYYY-MM-DD
+  return `${year}-${month}-${day}`;
 };
 
 export const TRANSLATIONS: Record<'fr' | 'en', Record<TranslationKey, string>> = {
@@ -86,7 +108,17 @@ export const TRANSLATIONS: Record<'fr' | 'en', Record<TranslationKey, string>> =
     filter_user: 'Utilisateur',
     filter_date: 'Date',
     start_date: 'Du',
-    end_date: 'Au'
+    end_date: 'Au',
+    view_calendar: 'Vue Calendrier',
+    view_grid: 'Vue Grille',
+    export_pdf: 'PDF',
+    export_image: 'Image',
+    color: 'Couleur',
+    error_entry_before_birth: 'La date d\'entrée doit être postérieure à la date de naissance.',
+    error_exit_before_birth: 'La date de sortie doit être postérieure à la date de naissance.',
+    error_exit_before_entry: 'La date de sortie doit être postérieure à la date d\'entrée.',
+    export: 'Exporter',
+    assign_to: 'Assigner à'
   },
   en: {
     home: 'Home',
@@ -152,6 +184,16 @@ export const TRANSLATIONS: Record<'fr' | 'en', Record<TranslationKey, string>> =
     filter_user: 'User',
     filter_date: 'Date',
     start_date: 'From',
-    end_date: 'To'
+    end_date: 'To',
+    view_calendar: 'Calendar View',
+    view_grid: 'Grid View',
+    export_pdf: 'PDF',
+    export_image: 'Image',
+    color: 'Color',
+    error_entry_before_birth: 'Entry date must be after birth date.',
+    error_exit_before_birth: 'Exit date must be after birth date.',
+    error_exit_before_entry: 'Exit date must be after entry date.',
+    export: 'Export',
+    assign_to: 'Assign to'
   }
 };

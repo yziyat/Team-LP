@@ -1,9 +1,10 @@
 
-import React from 'react';
-import { Users, UserCheck, UserX, BarChart as BarChartIcon, Briefcase } from 'lucide-react';
+import React, { useState } from 'react';
+import { Users, UserCheck, UserX, BarChart as BarChartIcon } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Employee, PlanningData, AppSettings, Team } from '../types';
+import { Employee, PlanningData, AppSettings } from '../types';
 import { TRANSLATIONS } from '../constants';
+import { Modal } from './ui/Modal';
 
 interface DashboardProps {
   employees: Employee[];
@@ -14,16 +15,28 @@ interface DashboardProps {
 export const Dashboard: React.FC<DashboardProps> = ({ employees, planning, lang }) => {
   const t = TRANSLATIONS[lang];
   const today = new Date().toISOString().split('T')[0];
+
+  const [modalType, setModalType] = useState<'present' | 'absent' | null>(null);
   
   // Calculate Stats
   const activeEmployees = employees.filter(e => !e.exitDate);
   
-  const presentCount = activeEmployees.filter(emp => {
-    const shift = planning[`${emp.id}_${today}`];
-    return shift && shift !== 'Repos' && shift !== 'Absent' && shift !== 'Congé' && shift !== 'Maladie';
-  }).length;
+  const getEmployeeStatus = (empId: number) => {
+    return planning[`${empId}_${today}`];
+  };
+
+  const presentEmployees = activeEmployees.filter(emp => {
+    const shift = getEmployeeStatus(emp.id);
+    return shift && shift !== 'Repos' && shift !== 'Absent' && shift !== 'Congé' && shift !== 'Maladie' && shift !== 'Formation' && shift !== 'Récupération';
+  });
   
-  const absentCount = activeEmployees.length - presentCount;
+  const absentEmployees = activeEmployees.filter(emp => {
+     const shift = getEmployeeStatus(emp.id);
+     return !shift || shift === 'Repos' || shift === 'Absent' || shift === 'Congé' || shift === 'Maladie' || shift === 'Formation' || shift === 'Récupération';
+  });
+
+  const presentCount = presentEmployees.length;
+  const absentCount = absentEmployees.length;
 
   // Category Distribution
   const categoryCounts = activeEmployees.reduce((acc, emp) => {
@@ -33,20 +46,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ employees, planning, lang 
 
   const chartData = Object.entries(categoryCounts).map(([name, value]) => ({ name, value }));
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
-
-  // Team Distribution logic (Need to infer teams from employee teamIds if teams prop isn't passed to dashboard)
-  // Since I don't have `teams` prop here, I'll count by teamId and display "Team {id}" or filter known IDs.
-  // Ideally Dashboard should receive teams prop. 
-  // For now let's just use Category chart as it's safe. 
-  // NOTE: Prompt asked for "Teams and member count". I will need to pass teams to Dashboard in App.tsx. 
-  // I will assume `teams` is NOT available in this specific file version yet, so I will stick to what I can do or 
-  // I will update App.tsx to pass teams.
   
-  // Let's assume I will update DashboardProps to include teams in the next steps (or user has to add it). 
-  // Wait, I can update the file content to include `teams` in props now.
-  
-  const StatCard = ({ title, value, icon: Icon, colorClass, bgClass }: any) => (
-    <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+  const StatCard = ({ title, value, icon: Icon, colorClass, bgClass, onClick }: any) => (
+    <div 
+      className={`bg-white p-6 rounded-xl border border-gray-100 shadow-sm transition-all duration-200 ${onClick ? 'cursor-pointer hover:shadow-md hover:-translate-y-1' : ''}`}
+      onClick={onClick}
+    >
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm font-medium text-gray-500 mb-1">{title}</p>
@@ -85,14 +90,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ employees, planning, lang 
           value={presentCount} 
           icon={UserCheck} 
           colorClass="text-green-600" 
-          bgClass="bg-green-50" 
+          bgClass="bg-green-50"
+          onClick={() => setModalType('present')} 
         />
         <StatCard 
           title={t.stats_absent} 
           value={absentCount} 
           icon={UserX} 
           colorClass="text-orange-600" 
-          bgClass="bg-orange-50" 
+          bgClass="bg-orange-50"
+          onClick={() => setModalType('absent')} 
         />
       </div>
 
@@ -125,6 +132,56 @@ export const Dashboard: React.FC<DashboardProps> = ({ employees, planning, lang 
           </div>
         )}
       </div>
+
+      {/* Detail Modal */}
+      <Modal
+        isOpen={!!modalType}
+        onClose={() => setModalType(null)}
+        title={modalType === 'present' ? t.stats_present : t.stats_absent}
+      >
+        <div className="space-y-4">
+           {modalType && (
+              <div className="overflow-hidden rounded-lg border border-gray-200">
+                 <table className="w-full text-left text-sm">
+                    <thead className="bg-gray-50 text-gray-500 font-semibold uppercase text-xs">
+                        <tr>
+                            <th className="px-4 py-3">{lang === 'fr' ? 'Employé' : 'Employee'}</th>
+                            <th className="px-4 py-3">{lang === 'fr' ? 'Statut / Shift' : 'Status / Shift'}</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                        {(modalType === 'present' ? presentEmployees : absentEmployees).length === 0 && (
+                            <tr>
+                                <td colSpan={2} className="px-4 py-6 text-center text-gray-400">
+                                    {lang === 'fr' ? 'Aucun résultat' : 'No results'}
+                                </td>
+                            </tr>
+                        )}
+                        {(modalType === 'present' ? presentEmployees : absentEmployees).map(emp => {
+                            const status = getEmployeeStatus(emp.id);
+                            return (
+                                <tr key={emp.id} className="bg-white hover:bg-gray-50">
+                                    <td className="px-4 py-3">
+                                        <div className="font-medium text-gray-900">{emp.firstName} {emp.lastName}</div>
+                                        <div className="text-xs text-gray-500">{emp.matricule}</div>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <span className={`inline-flex px-2 py-1 rounded text-xs font-semibold ${modalType === 'present' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                                            {status || (lang === 'fr' ? 'Non défini' : 'Undefined')}
+                                        </span>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                 </table>
+              </div>
+           )}
+           <div className="text-right text-xs text-gray-400">
+              {new Date().toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+           </div>
+        </div>
+      </Modal>
     </div>
   );
 };

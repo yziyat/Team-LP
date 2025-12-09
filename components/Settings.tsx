@@ -1,10 +1,10 @@
 
 import React, { useState } from 'react';
 import { Plus, Trash2, CheckSquare, Square, Globe, Briefcase, Users as UsersIcon, Clock, Edit2, CalendarOff, CalendarDays } from 'lucide-react';
-import { AppSettings, Team, Employee, Shift, Holiday } from '../types';
+import { AppSettings, Team, Employee, Shift, Holiday, AbsenceType } from '../types';
 import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
-import { TRANSLATIONS } from '../constants';
+import { TRANSLATIONS, formatDisplayDate } from '../constants';
 
 interface SettingsProps {
   settings: AppSettings;
@@ -22,11 +22,12 @@ export const Settings: React.FC<SettingsProps> = ({
   const t = TRANSLATIONS[settings.language];
   
   const [newCategory, setNewCategory] = useState('');
-  const [newAbsenceType, setNewAbsenceType] = useState('');
+  const [newAbsenceType, setNewAbsenceType] = useState<AbsenceType>({ name: '', color: '#9ca3af' });
   
   // Holiday State
   const [newHolidayDate, setNewHolidayDate] = useState('');
   const [newHolidayName, setNewHolidayName] = useState('');
+  const [editingHolidayOldDate, setEditingHolidayOldDate] = useState<string | null>(null);
 
   // Shift State
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
@@ -54,14 +55,14 @@ export const Settings: React.FC<SettingsProps> = ({
 
   // Absence Type Handlers
   const handleAddAbsence = () => {
-    if (newAbsenceType && !settings.absenceTypes.includes(newAbsenceType)) {
+    if (newAbsenceType.name && !settings.absenceTypes.some(a => a.name === newAbsenceType.name)) {
       onUpdateSettings('absenceTypes', [...settings.absenceTypes, newAbsenceType]);
-      setNewAbsenceType('');
+      setNewAbsenceType({ name: '', color: '#9ca3af' });
     }
   };
 
-  const handleRemoveAbsence = (abs: string) => {
-    onUpdateSettings('absenceTypes', settings.absenceTypes.filter(a => a !== abs));
+  const handleRemoveAbsence = (absName: string) => {
+    onUpdateSettings('absenceTypes', settings.absenceTypes.filter(a => a.name !== absName));
   };
 
   // Holiday Handlers
@@ -69,20 +70,46 @@ export const Settings: React.FC<SettingsProps> = ({
     e.preventDefault();
     if (newHolidayDate && newHolidayName) {
       const newHoliday: Holiday = { date: newHolidayDate, name: newHolidayName };
-      // Prevent duplicate dates?
-      const exists = settings.holidays.find(h => h.date === newHolidayDate);
-      if (!exists) {
-        onUpdateSettings('holidays', [...settings.holidays, newHoliday].sort((a,b) => a.date.localeCompare(b.date)));
-        setNewHolidayDate('');
-        setNewHolidayName('');
+      let newHolidays = [...settings.holidays];
+      
+      // If editing, remove old entry first
+      if (editingHolidayOldDate) {
+        newHolidays = newHolidays.filter(h => h.date !== editingHolidayOldDate);
       } else {
-        alert("Date already exists");
+         // Check duplicate only if adding new
+         if (newHolidays.some(h => h.date === newHolidayDate)) {
+           alert("Date already exists");
+           return;
+         }
       }
+
+      newHolidays.push(newHoliday);
+      onUpdateSettings('holidays', newHolidays.sort((a,b) => a.date.localeCompare(b.date)));
+      
+      // Reset
+      setNewHolidayDate('');
+      setNewHolidayName('');
+      setEditingHolidayOldDate(null);
     }
   };
 
+  const handleEditHoliday = (h: Holiday) => {
+    setNewHolidayDate(h.date);
+    setNewHolidayName(h.name);
+    setEditingHolidayOldDate(h.date);
+  };
+
+  const handleCancelEditHoliday = () => {
+    setNewHolidayDate('');
+    setNewHolidayName('');
+    setEditingHolidayOldDate(null);
+  };
+
   const handleRemoveHoliday = (date: string) => {
-    onUpdateSettings('holidays', settings.holidays.filter(h => h.date !== date));
+    if(window.confirm(t.delete + '?')) {
+      onUpdateSettings('holidays', settings.holidays.filter(h => h.date !== date));
+      if (editingHolidayOldDate === date) handleCancelEditHoliday();
+    }
   };
 
   // Shift Handlers
@@ -210,7 +237,7 @@ export const Settings: React.FC<SettingsProps> = ({
           <CalendarDays size={16} /> {t.holidays}
         </h3>
         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-          <form onSubmit={handleAddHoliday} className="flex flex-col sm:flex-row gap-2 mb-4">
+          <form onSubmit={handleAddHoliday} className="flex flex-col sm:flex-row gap-2 mb-4 bg-gray-50 p-3 rounded-lg border border-gray-100">
             <input 
               required
               type="date"
@@ -226,19 +253,34 @@ export const Settings: React.FC<SettingsProps> = ({
               placeholder="Ex: New Year"
               className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
             />
-            <Button type="submit" size="sm">{t.add}</Button>
+            <div className="flex gap-1">
+              {editingHolidayOldDate && (
+                 <Button type="button" variant="ghost" size="sm" onClick={handleCancelEditHoliday}>
+                   {t.cancel}
+                 </Button>
+              )}
+              <Button type="submit" size="sm">
+                {editingHolidayOldDate ? t.update : t.add}
+              </Button>
+            </div>
           </form>
+          
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             {settings.holidays.length === 0 ? <p className="text-sm text-gray-400 italic">No holidays configured</p> : null}
             {settings.holidays.map(h => (
-               <div key={h.date} className="flex items-center justify-between p-2 bg-red-50 text-red-800 rounded border border-red-100">
+               <div key={h.date} className="flex items-center justify-between p-2 bg-white rounded border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
                   <div className="flex flex-col">
-                    <span className="text-xs font-bold">{h.date}</span>
-                    <span className="text-sm">{h.name}</span>
+                    <span className="text-xs font-bold text-gray-800">{formatDisplayDate(h.date, settings.dateFormat)}</span>
+                    <span className="text-sm text-gray-600">{h.name}</span>
                   </div>
-                  <button onClick={() => handleRemoveHoliday(h.date)} className="text-red-400 hover:text-red-700">
-                    <Trash2 size={14} />
-                  </button>
+                  <div className="flex gap-1">
+                    <button onClick={() => handleEditHoliday(h)} className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title={t.edit}>
+                       <Edit2 size={14} />
+                    </button>
+                    <button onClick={() => handleRemoveHoliday(h.date)} className="p-1.5 text-red-400 hover:text-red-700 hover:bg-red-50 rounded transition-colors" title={t.delete}>
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                </div>
             ))}
           </div>
@@ -289,18 +331,27 @@ export const Settings: React.FC<SettingsProps> = ({
             <div className="flex gap-2 mb-4">
               <input 
                 type="text" 
-                value={newAbsenceType} 
-                onChange={(e) => setNewAbsenceType(e.target.value)}
+                value={newAbsenceType.name} 
+                onChange={(e) => setNewAbsenceType({...newAbsenceType, name: e.target.value})}
                 placeholder="Ex: Maladie..."
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
               />
+              <div className="flex items-center gap-1 border border-gray-300 rounded-lg px-2 bg-white">
+                <input 
+                  type="color" 
+                  value={newAbsenceType.color}
+                  onChange={(e) => setNewAbsenceType({...newAbsenceType, color: e.target.value})}
+                  className="w-6 h-6 border-0 p-0 cursor-pointer"
+                />
+              </div>
               <Button onClick={handleAddAbsence} size="sm">{t.add}</Button>
             </div>
             <div className="flex flex-wrap gap-2">
               {settings.absenceTypes.map(abs => (
-                <div key={abs} className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-full border border-gray-200 group">
-                  <span className="text-xs font-medium">{abs}</span>
-                  <button onClick={() => handleRemoveAbsence(abs)} className="text-gray-400 hover:text-red-600">
+                <div key={abs.name} className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 text-gray-700 rounded-full border border-gray-200 shadow-sm group">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: abs.color }}></div>
+                  <span className="text-xs font-medium">{abs.name}</span>
+                  <button onClick={() => handleRemoveAbsence(abs.name)} className="text-gray-400 hover:text-red-600 ml-1">
                     <Trash2 size={12} />
                   </button>
                 </div>

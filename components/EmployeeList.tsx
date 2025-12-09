@@ -1,10 +1,10 @@
 
 import React, { useState } from 'react';
-import { Search, Plus, Edit2, Trash2, Filter, User, LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Filter, User, LogOut, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import { Employee, AppSettings, User as UserType } from '../types';
 import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
-import { TRANSLATIONS } from '../constants';
+import { TRANSLATIONS, formatDisplayDate } from '../constants';
 
 interface EmployeeListProps {
   employees: Employee[];
@@ -13,9 +13,10 @@ interface EmployeeListProps {
   onAdd: (emp: Omit<Employee, 'id'>) => void;
   onUpdate: (id: number, emp: Partial<Employee>) => void;
   onDelete: (id: number) => void;
+  notify: (message: string, type: 'success' | 'error' | 'info') => void;
 }
 
-export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings, currentUser, onAdd, onUpdate, onDelete }) => {
+export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings, currentUser, onAdd, onUpdate, onDelete, notify }) => {
   const t = TRANSLATIONS[settings.language];
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -99,9 +100,35 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
     setIsExitModalOpen(true);
   };
 
+  const validateDates = (birthDate: string, entryDate: string, exitDate: string | null) => {
+    const birth = new Date(birthDate);
+    const entry = entryDate ? new Date(entryDate) : null;
+    const exit = exitDate ? new Date(exitDate) : null;
+
+    if (entry && entry <= birth) {
+        notify(t.error_entry_before_birth, 'error');
+        return false;
+    }
+    if (exit && exit <= birth) {
+        notify(t.error_exit_before_birth, 'error');
+        return false;
+    }
+    if (exit && entry && exit <= entry) {
+        notify(t.error_exit_before_entry, 'error');
+        return false;
+    }
+    return true;
+  };
+
   const handleSaveExitDate = (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedExitEmployee) {
+      if (exitDate) {
+         // Validate against employee's birth and entry date
+         const isValid = validateDates(selectedExitEmployee.birthDate, selectedExitEmployee.entryDate || '', exitDate);
+         if (!isValid) return;
+      }
+      
       onUpdate(selectedExitEmployee.id, { exitDate: exitDate || null });
       setIsExitModalOpen(false);
     }
@@ -109,6 +136,11 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate Dates
+    const isValid = validateDates(formData.birthDate, formData.entryDate, null);
+    if (!isValid) return;
+
     if (editingEmployee) {
       onUpdate(editingEmployee.id, formData);
     } else {
@@ -116,6 +148,23 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
     }
     setIsModalOpen(false);
   };
+
+  // Render Action Buttons
+  const renderActions = (emp: Employee) => (
+    currentUser.role === 'admin' && (
+      <div className="flex items-center justify-end gap-1">
+        <button onClick={() => handleOpenExitModal(emp)} className="p-1.5 hover:bg-orange-50 text-orange-600 rounded-lg transition-colors" title={t.exit_management}>
+          <LogOut size={16} />
+        </button>
+        <button onClick={() => handleOpenModal(emp)} className="p-1.5 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors">
+          <Edit2 size={16} />
+        </button>
+        <button onClick={() => { if(window.confirm(t.delete + '?')) onDelete(emp.id) }} className="p-1.5 hover:bg-red-50 text-red-600 rounded-lg transition-colors">
+          <Trash2 size={16} />
+        </button>
+      </div>
+    )
+  );
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -154,8 +203,57 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+      {/* Mobile Card View */}
+      <div className="grid grid-cols-1 gap-4 md:hidden">
+         {paginatedEmployees.length > 0 ? (
+            paginatedEmployees.map(emp => (
+                <div key={emp.id} className={`bg-white p-4 rounded-lg shadow-sm border border-gray-200 ${emp.exitDate ? 'bg-gray-50 opacity-75' : ''}`}>
+                    <div className="flex items-center justify-between mb-3">
+                         <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${emp.exitDate ? 'bg-gray-200 text-gray-500' : 'bg-blue-100 text-blue-600'}`}>
+                                {emp.firstName[0]}{emp.lastName[0]}
+                            </div>
+                            <div>
+                                <h3 className="font-semibold text-gray-900">{emp.firstName} {emp.lastName}</h3>
+                                <div className="text-xs text-gray-500 font-mono">{emp.matricule}</div>
+                            </div>
+                        </div>
+                        {emp.isBonusEligible && !emp.exitDate && (
+                             <span className="text-[10px] text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full border border-green-100">Bonus</span>
+                        )}
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-y-2 text-sm text-gray-600 mb-4">
+                        <div className="flex flex-col">
+                            <span className="text-[10px] uppercase text-gray-400">Category</span>
+                            <span>{emp.category}</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[10px] uppercase text-gray-400">Assignment</span>
+                            <span>{emp.assignment}</span>
+                        </div>
+                         <div className="flex flex-col">
+                            <span className="text-[10px] uppercase text-gray-400">Entry</span>
+                            <span>{formatDisplayDate(emp.entryDate, settings.dateFormat)}</span>
+                        </div>
+                         <div className="flex flex-col">
+                            <span className="text-[10px] uppercase text-gray-400">Exit</span>
+                            <span className={emp.exitDate ? "text-red-500 font-medium" : "text-gray-400"}>{emp.exitDate ? formatDisplayDate(emp.exitDate, settings.dateFormat) : '-'}</span>
+                        </div>
+                    </div>
+                    
+                    <div className="border-t pt-3 flex justify-end">
+                        {renderActions(emp)}
+                    </div>
+                </div>
+            ))
+         ) : (
+            <div className="text-center py-8 text-gray-400">No employees</div>
+         )}
+      </div>
+
+      {/* Desktop Table View */}
+      <div className="hidden md:block bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -194,32 +292,20 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
                     </td>
                     <td className="px-6 py-3 text-xs text-gray-600">{emp.assignment}</td>
                      <td className="px-6 py-3 text-xs text-gray-600">
-                      {emp.entryDate ? new Date(emp.entryDate).toLocaleDateString(settings.language === 'fr' ? 'fr-FR' : 'en-US') : '-'}
+                      {formatDisplayDate(emp.entryDate, settings.dateFormat)}
                     </td>
                     <td className="px-6 py-3">
                        {emp.exitDate ? (
                          <div className="flex items-center gap-1 text-xs text-red-500 font-medium">
                            <LogOut size={12} />
-                           {new Date(emp.exitDate).toLocaleDateString(settings.language === 'fr' ? 'fr-FR' : 'en-US')}
+                           {formatDisplayDate(emp.exitDate, settings.dateFormat)}
                          </div>
                        ) : (
                          <span className="text-xs text-green-600 font-medium">Active</span>
                        )}
                     </td>
                     <td className="px-6 py-3 text-right">
-                      {currentUser.role === 'admin' && (
-                        <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => handleOpenExitModal(emp)} className="p-1.5 hover:bg-orange-50 text-orange-600 rounded-lg transition-colors" title={t.exit_management}>
-                            <LogOut size={14} />
-                          </button>
-                          <button onClick={() => handleOpenModal(emp)} className="p-1.5 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors">
-                            <Edit2 size={14} />
-                          </button>
-                          <button onClick={() => { if(window.confirm(t.delete + '?')) onDelete(emp.id) }} className="p-1.5 hover:bg-red-50 text-red-600 rounded-lg transition-colors">
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      )}
+                      {renderActions(emp)}
                     </td>
                   </tr>
                 ))

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { AuditLogEntry, AppSettings } from '../types';
-import { TRANSLATIONS } from '../constants';
+import { TRANSLATIONS, formatDisplayDate } from '../constants';
 import { Search, ShieldAlert, Filter, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
 
 interface AuditLogProps {
@@ -70,6 +70,15 @@ export const AuditLog: React.FC<AuditLogProps> = ({ logs, lang }) => {
 
   const startItem = itemsPerPage === 'all' ? 1 : (currentPage - 1) * itemsPerPage + 1;
   const endItem = itemsPerPage === 'all' ? totalItems : Math.min(currentPage * itemsPerPage, totalItems);
+
+  // Helper for rendering date
+  const renderDate = (isoStr: string) => {
+      const d = new Date(isoStr);
+      // Just hardcode a format for log time? or use settings.
+      // Ideally we pass full settings object to get format.
+      // But formatDisplayDate is generic. Let's use localestring.
+      return d.toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US');
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -140,8 +149,28 @@ export const AuditLog: React.FC<AuditLogProps> = ({ logs, lang }) => {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+      {/* Mobile Card View */}
+      <div className="grid grid-cols-1 gap-4 md:hidden">
+          {paginatedLogs.length > 0 ? (
+              paginatedLogs.map(log => (
+                  <div key={log.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                      <div className="flex justify-between items-start mb-2">
+                          <span className="text-xs font-bold text-blue-600 uppercase">{log.action}</span>
+                          <span className="text-xs text-gray-500">{renderDate(log.timestamp)}</span>
+                      </div>
+                      <p className="text-sm text-gray-800 font-mono bg-gray-50 p-2 rounded mb-2 break-all">{log.details}</p>
+                      <div className="text-xs text-right text-gray-500">
+                          by <span className="font-medium text-gray-700">{log.user}</span>
+                      </div>
+                  </div>
+              ))
+          ) : (
+              <div className="text-center py-8 text-gray-400">No logs found</div>
+          )}
+      </div>
+
+      {/* Desktop Table View */}
+      <div className="hidden md:block bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -157,7 +186,7 @@ export const AuditLog: React.FC<AuditLogProps> = ({ logs, lang }) => {
                 paginatedLogs.map(log => (
                   <tr key={log.id} className="hover:bg-gray-50/50 transition-colors">
                     <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
-                      {new Date(log.timestamp).toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US')}
+                      {renderDate(log.timestamp)}
                     </td>
                     <td className="px-6 py-4">
                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
@@ -167,7 +196,7 @@ export const AuditLog: React.FC<AuditLogProps> = ({ logs, lang }) => {
                     <td className="px-6 py-4 text-sm font-semibold text-gray-700">
                       {log.action}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
+                    <td className="px-6 py-4 text-sm text-gray-600 font-mono">
                       {log.details}
                     </td>
                   </tr>

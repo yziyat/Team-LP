@@ -68,6 +68,33 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
     }
   };
 
+  const handleDelete = (id: number) => {
+      if (window.confirm(t.delete + '?')) {
+          onDeleteUser(id);
+      }
+  };
+
+  const renderActions = (user: User) => (
+      <div className="flex items-center justify-end gap-2">
+        <button 
+          onClick={() => openModal(user)}
+          className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors"
+          title={t.edit}
+        >
+          <Edit2 size={16} />
+        </button>
+        {currentUser.role === 'admin' && (
+          <button 
+            onClick={() => handleDelete(user.id)}
+            className="p-1.5 text-gray-400 hover:text-red-600 transition-colors"
+            title={t.delete}
+          >
+            <Trash2 size={16} />
+          </button>
+        )}
+      </div>
+  );
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
@@ -80,7 +107,45 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
         </Button>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      {/* Mobile Card View */}
+      <div className="grid grid-cols-1 gap-4 md:hidden">
+         {users.map(user => {
+             const linkedEmployee = employees.find(e => e.id === user.employeeId);
+             return (
+                 <div key={user.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                     <div className="flex justify-between items-start mb-2">
+                         <div>
+                             <h4 className="font-semibold text-gray-900">{user.name}</h4>
+                             <p className="text-xs text-gray-500">{user.email}</p>
+                         </div>
+                          <button 
+                            disabled={currentUser.role !== 'admin'}
+                            onClick={() => toggleActive(user)}
+                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors ${user.active ? 'bg-green-50 text-green-700 border-green-100' : 'bg-gray-50 text-gray-500 border-gray-200'}`}
+                          >
+                            {user.active ? <CheckCircle size={10} /> : <XCircle size={10} />}
+                            {user.active ? (lang === 'fr' ? 'Actif' : 'Active') : (lang === 'fr' ? 'Inactif' : 'Inactive')}
+                          </button>
+                     </div>
+                     <div className="flex justify-between items-center text-sm text-gray-600 mb-3">
+                         <span className="capitalize bg-gray-100 px-2 py-0.5 rounded text-xs">{user.role}</span>
+                         {linkedEmployee && (
+                            <div className="flex items-center gap-1 text-[10px] text-blue-600">
+                                <LinkIcon size={10} />
+                                {linkedEmployee.firstName} {linkedEmployee.lastName}
+                            </div>
+                        )}
+                     </div>
+                     <div className="border-t pt-2 flex justify-end">
+                         {renderActions(user)}
+                     </div>
+                 </div>
+             );
+         })}
+      </div>
+
+      {/* Desktop Table View */}
+      <div className="hidden md:block bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase text-gray-500 font-semibold tracking-wider">
@@ -120,24 +185,7 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
                   </button>
                 </td>
                 <td className="px-6 py-3 text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <button 
-                      onClick={() => openModal(user)}
-                      className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors"
-                      title={t.edit}
-                    >
-                      <Edit2 size={14} />
-                    </button>
-                    {currentUser.role === 'admin' && (
-                      <button 
-                        onClick={() => { if(window.confirm(t.delete + '?')) onDeleteUser(user.id) }} 
-                        className="p-1.5 text-gray-400 hover:text-red-600 transition-colors"
-                        title={t.delete}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </div>
+                  {renderActions(user)}
                 </td>
               </tr>
             )})}

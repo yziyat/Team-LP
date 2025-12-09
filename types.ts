@@ -22,6 +22,11 @@ export interface Shift {
   color: string;
 }
 
+export interface AbsenceType {
+  name: string;
+  color: string;
+}
+
 export interface Holiday {
   date: string; // YYYY-MM-DD
   name: string;
@@ -62,14 +67,20 @@ export interface AppSettings {
   categories: string[];
   shifts: Shift[];
   assignments: string[];
-  absenceTypes: string[]; // New field for absence reasons
-  holidays: Holiday[]; // New field for public holidays
+  absenceTypes: AbsenceType[]; // Updated to object with color
+  holidays: Holiday[]; 
   dateFormat: string;
   language: 'fr' | 'en';
 }
 
 export interface PlanningData {
   [key: string]: string; // key is "employeeId_YYYY-MM-DD", value is shiftName
+}
+
+export interface Notification {
+  id: number;
+  message: string;
+  type: 'success' | 'error' | 'info';
 }
 
 export type TabName = 'home' | 'dashboard' | 'employees' | 'planning' | 'settings' | 'users' | 'bonus' | 'audit';
@@ -87,4 +98,7 @@ export type TranslationKey =
   | 'edit_team' | 'create_team' | 'team_name' | 'team_leader' | 'team_members'
   | 'exit_date' | 'entry_date' | 'exit_management' | 'set_exit_date' | 'active_status'
   | 'holidays' | 'absence_types' | 'history' | 'filter_name_code'
-  | 'rows_per_page' | 'all' | 'showing_range' | 'filter_action' | 'filter_user' | 'filter_date' | 'start_date' | 'end_date';
+  | 'rows_per_page' | 'all' | 'showing_range' | 'filter_action' | 'filter_user' | 'filter_date' | 'start_date' | 'end_date'
+  | 'view_calendar' | 'view_grid' | 'export_pdf' | 'export_image' | 'color'
+  | 'error_entry_before_birth' | 'error_exit_before_birth' | 'error_exit_before_entry'
+  | 'export' | 'assign_to';

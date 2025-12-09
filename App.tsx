@@ -22,16 +22,17 @@ import { Settings } from './components/Settings';
 import { UserList } from './components/UserList';
 import { Bonus } from './components/Bonus';
 import { AuditLog } from './components/AuditLog';
+import { Toast } from './components/ui/Toast';
 import { TabName, User } from './types';
 import { TRANSLATIONS } from './constants';
 
 function App() {
   const { 
-    employees, teams, users, settings, planning, bonuses, logs,
+    employees, teams, users, settings, planning, bonuses, logs, notifications,
     addEmployee, updateEmployee, deleteEmployee,
     updateSettings, addTeam, updateTeam, deleteTeam,
     setPlanningItem, addUser, updateUser, deleteUser,
-    setBonus
+    setBonus, notify
   } = useDataStore();
 
   const [activeTab, setActiveTab] = useState<TabName>('home');
@@ -69,6 +70,8 @@ function App() {
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
+      <Toast notifications={notifications} />
+
       {/* Mobile Overlay */}
       {isMobileMenuOpen && (
         <div 
@@ -160,6 +163,7 @@ function App() {
                 onAdd={addEmployee}
                 onUpdate={updateEmployee}
                 onDelete={deleteEmployee}
+                notify={notify}
               />
             )}
 
@@ -181,6 +185,7 @@ function App() {
                 bonuses={bonuses}
                 settings={settings}
                 onUpdateBonus={setBonus}
+                currentUser={currentUser}
               />
             )}
 
