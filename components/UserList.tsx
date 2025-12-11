@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Plus, Trash2, CheckCircle, XCircle, Edit2, Link as LinkIcon } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, XCircle, Edit2, Link as LinkIcon, UserCheck } from 'lucide-react';
 import { User, AppSettings, Employee } from '../types';
 import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
@@ -20,6 +20,7 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
   const t = TRANSLATIONS[lang];
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [filter, setFilter] = useState<'all' | 'pending'>('all');
   
   // Form State
   const [formData, setFormData] = useState({ 
@@ -95,21 +96,45 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
       </div>
   );
 
+  const pendingCount = users.filter(u => !u.active).length;
+  const filteredUsers = filter === 'all' ? users : users.filter(u => !u.active);
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">{t.users}</h2>
           <p className="text-gray-500">{lang === 'fr' ? 'Gestion des accès' : 'Access management'}</p>
         </div>
-        <Button onClick={() => openModal()} icon={Plus}>
-          {lang === 'fr' ? 'Nouvel utilisateur' : 'New User'}
-        </Button>
+        <div className="flex items-center gap-3">
+            {/* Filter Tabs */}
+            <div className="flex bg-white rounded-lg border border-gray-200 p-1">
+                <button 
+                    onClick={() => setFilter('all')}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${filter === 'all' ? 'bg-gray-100 text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                    {t.all}
+                </button>
+                <button 
+                    onClick={() => setFilter('pending')}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all flex items-center gap-2 ${filter === 'pending' ? 'bg-orange-50 text-orange-700' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                    Pending
+                    {pendingCount > 0 && (
+                        <span className="bg-orange-500 text-white text-[10px] px-1.5 rounded-full">{pendingCount}</span>
+                    )}
+                </button>
+            </div>
+            
+            <Button onClick={() => openModal()} icon={Plus}>
+            {lang === 'fr' ? 'Nouvel utilisateur' : 'New User'}
+            </Button>
+        </div>
       </div>
 
       {/* Mobile Card View */}
       <div className="grid grid-cols-1 gap-4 md:hidden">
-         {users.map(user => {
+         {filteredUsers.map(user => {
              const linkedEmployee = employees.find(e => e.id === user.employeeId);
              return (
                  <div key={user.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
@@ -121,10 +146,10 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
                           <button 
                             disabled={currentUser.role !== 'admin'}
                             onClick={() => toggleActive(user)}
-                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors ${user.active ? 'bg-green-50 text-green-700 border-green-100' : 'bg-gray-50 text-gray-500 border-gray-200'}`}
+                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors ${user.active ? 'bg-green-50 text-green-700 border-green-100' : 'bg-orange-50 text-orange-700 border-orange-100'}`}
                           >
-                            {user.active ? <CheckCircle size={10} /> : <XCircle size={10} />}
-                            {user.active ? (lang === 'fr' ? 'Actif' : 'Active') : (lang === 'fr' ? 'Inactif' : 'Inactive')}
+                            {user.active ? <CheckCircle size={10} /> : <UserCheck size={10} />}
+                            {user.active ? (lang === 'fr' ? 'Actif' : 'Active') : (lang === 'fr' ? 'En attente' : 'Pending')}
                           </button>
                      </div>
                      <div className="flex justify-between items-center text-sm text-gray-600 mb-3">
@@ -157,7 +182,14 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {users.map(user => {
+            {filteredUsers.length === 0 && (
+                <tr>
+                    <td colSpan={5} className="px-6 py-12 text-center text-gray-400">
+                        No users found in this category.
+                    </td>
+                </tr>
+            )}
+            {filteredUsers.map(user => {
               const linkedEmployee = employees.find(e => e.id === user.employeeId);
               return (
               <tr key={user.id} className="hover:bg-gray-50/50">
@@ -178,10 +210,10 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
                   <button 
                     disabled={currentUser.role !== 'admin'}
                     onClick={() => toggleActive(user)}
-                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors ${user.active ? 'bg-green-50 text-green-700 border-green-100' : 'bg-gray-50 text-gray-500 border-gray-200'} ${currentUser.role === 'admin' ? 'cursor-pointer' : 'cursor-default'}`}
+                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors ${user.active ? 'bg-green-50 text-green-700 border-green-100' : 'bg-orange-50 text-orange-700 border-orange-100'} ${currentUser.role === 'admin' ? 'cursor-pointer hover:shadow-sm' : 'cursor-default'}`}
                   >
-                    {user.active ? <CheckCircle size={10} /> : <XCircle size={10} />}
-                    {user.active ? (lang === 'fr' ? 'Actif' : 'Active') : (lang === 'fr' ? 'Inactif' : 'Inactive')}
+                    {user.active ? <CheckCircle size={10} /> : <UserCheck size={10} />}
+                    {user.active ? (lang === 'fr' ? 'Actif' : 'Active') : (lang === 'fr' ? 'En attente' : 'Pending Approval')}
                   </button>
                 </td>
                 <td className="px-6 py-3 text-right">

@@ -1,10 +1,13 @@
 
-import React, { useState } from 'react';
-import { Search, Plus, Edit2, Trash2, Filter, User, LogOut, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Search, Plus, Edit2, Trash2, Filter, User, LogOut, ChevronLeft, ChevronRight, Calendar, Download, FileText, Image as ImageIcon, ChevronDown } from 'lucide-react';
 import { Employee, AppSettings, User as UserType } from '../types';
 import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
 import { TRANSLATIONS, formatDisplayDate } from '../constants';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface EmployeeListProps {
   employees: Employee[];
@@ -18,8 +21,10 @@ interface EmployeeListProps {
 
 export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings, currentUser, onAdd, onUpdate, onDelete, notify }) => {
   const t = TRANSLATIONS[settings.language];
+  const tableRef = useRef<HTMLDivElement>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   
   // Pagination State
   const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(50);
@@ -44,6 +49,8 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
     entryDate: '' // New Field
   });
 
+  const isAdmin = currentUser.role === 'admin';
+
   const filteredEmployees = employees.filter(emp => {
     const matchesSearch = 
       emp.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -66,6 +73,8 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
 
 
   const handleOpenModal = (emp?: Employee) => {
+    if (!isAdmin) return; // Protection
+
     if (emp) {
       setEditingEmployee(emp);
       setFormData({
@@ -95,6 +104,7 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
   };
 
   const handleOpenExitModal = (emp: Employee) => {
+    if (!isAdmin) return;
     setSelectedExitEmployee(emp);
     setExitDate(emp.exitDate || '');
     setIsExitModalOpen(true);
@@ -136,6 +146,7 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) return;
     
     // Validate Dates
     const isValid = validateDates(formData.birthDate, formData.entryDate, null);
@@ -149,9 +160,135 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
     setIsModalOpen(false);
   };
 
+  // Export Logic
+  const handleExport = async (type: 'pdf' | 'excel' | 'image') => {
+      setIsExportMenuOpen(false);
+      const filename = `employees_${new Date().toISOString().slice(0, 10)}`;
+
+      if (type === 'excel') {
+          // EXCEL EXPORT (Using HTML Table approach for best formatting results without heavy libraries)
+          
+          let tableContent = `
+            <html>
+            <head>
+            <meta charset="UTF-8">
+            <style>
+              table { border-collapse: collapse; width: 100%; }
+              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+              th { background-color: #f2f2f2; }
+            </style>
+            </head>
+            <body>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Matricule</th>
+                    <th>First Name</th>
+                    <th>Last Name</th>
+                    <th>Category</th>
+                    <th>Assignment</th>
+                    <th>Entry Date</th>
+                    <th>Exit Date</th>
+                    <th>Bonus Eligible</th>
+                  </tr>
+                </thead>
+                <tbody>
+          `;
+
+          filteredEmployees.forEach(e => {
+            tableContent += `
+              <tr>
+                <td>${e.matricule}</td>
+                <td>${e.firstName}</td>
+                <td>${e.lastName}</td>
+                <td>${e.category}</td>
+                <td>${e.assignment}</td>
+                <td>${e.entryDate || ''}</td>
+                <td>${e.exitDate || ''}</td>
+                <td>${e.isBonusEligible ? 'Yes' : 'No'}</td>
+              </tr>
+            `;
+          });
+
+          tableContent += `
+                </tbody>
+              </table>
+            </body>
+            </html>
+          `;
+
+          const blob = new Blob([tableContent], { type: 'application/vnd.ms-excel' });
+          const link = document.createElement("a");
+          if (link.download !== undefined) {
+              const url = URL.createObjectURL(blob);
+              link.setAttribute("href", url);
+              link.setAttribute("download", `${filename}.xls`); // Using .xls for HTML/XML format compatibility
+              link.style.visibility = 'hidden';
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+          }
+
+      } else if (type === 'pdf') {
+          const doc = new jsPDF();
+          doc.text("Employee List", 14, 15);
+          
+          const columns = [
+              { header: 'Matricule', dataKey: 'matricule' },
+              { header: 'First Name', dataKey: 'firstName' },
+              { header: 'Last Name', dataKey: 'lastName' },
+              { header: 'Category', dataKey: 'category' },
+              { header: 'Assignment', dataKey: 'assignment' },
+              { header: 'Entry', dataKey: 'entryDate' },
+              { header: 'Status', dataKey: 'status' }
+          ];
+
+          const data = filteredEmployees.map(e => ({
+              matricule: e.matricule,
+              firstName: e.firstName,
+              lastName: e.lastName,
+              category: e.category,
+              assignment: e.assignment,
+              entryDate: e.entryDate || '-',
+              status: e.exitDate ? `Exit: ${e.exitDate}` : 'Active'
+          }));
+
+          autoTable(doc, {
+              head: [columns.map(c => c.header)],
+              body: data.map(row => columns.map(c => row[c.dataKey as keyof typeof row])),
+              startY: 20,
+              styles: { fontSize: 8 }
+          });
+          doc.save(`${filename}.pdf`);
+      } else {
+          // Image
+          if (!tableRef.current) return;
+          try {
+              const clone = tableRef.current.cloneNode(true) as HTMLElement;
+              clone.style.position = 'absolute';
+              clone.style.top = '-9999px';
+              clone.style.width = 'fit-content';
+              clone.style.minWidth = '800px';
+              clone.style.background = 'white';
+              clone.style.zIndex = '9999';
+              document.body.appendChild(clone);
+
+              const canvas = await html2canvas(clone, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+              document.body.removeChild(clone);
+
+              const link = document.createElement('a');
+              link.href = canvas.toDataURL('image/png');
+              link.download = `${filename}.png`;
+              link.click();
+          } catch(e) {
+              notify('Export failed', 'error');
+          }
+      }
+  };
+
   // Render Action Buttons
   const renderActions = (emp: Employee) => (
-    currentUser.role === 'admin' && (
+    isAdmin && (
       <div className="flex items-center justify-end gap-1">
         <button onClick={() => handleOpenExitModal(emp)} className="p-1.5 hover:bg-orange-50 text-orange-600 rounded-lg transition-colors" title={t.exit_management}>
           <LogOut size={16} />
@@ -173,9 +310,41 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
           <h2 className="text-2xl font-bold text-gray-800">{t.employees}</h2>
           <p className="text-gray-500">{settings.language === 'fr' ? 'Gérez votre personnel et leurs informations' : 'Manage your staff and their information'}</p>
         </div>
-        <Button onClick={() => handleOpenModal()} icon={Plus}>
-          {t.new_employee}
-        </Button>
+        <div className="flex gap-2">
+            {/* Export Dropdown */}
+            <div className="relative">
+                <button 
+                onClick={() => setIsExportMenuOpen(!isExportMenuOpen)} 
+                className="flex items-center gap-2 px-3 py-2 bg-white text-gray-700 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors text-sm font-medium shadow-sm h-full"
+                >
+                <Download size={18} />
+                <span className="hidden sm:inline">{t.export}</span>
+                <ChevronDown size={14} />
+                </button>
+                {isExportMenuOpen && (
+                <div className="absolute right-0 mt-2 w-32 bg-white rounded-lg shadow-lg border border-gray-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                    <button onClick={() => handleExport('pdf')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 border-b border-gray-50">
+                        <FileText size={14} /> {t.export_pdf}
+                    </button>
+                    <button onClick={() => handleExport('excel')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 border-b border-gray-50">
+                        <FileText size={14} /> Excel (.xls)
+                    </button>
+                    <button onClick={() => handleExport('image')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                        <ImageIcon size={14} /> {t.export_image}
+                    </button>
+                </div>
+                )}
+                {isExportMenuOpen && (
+                    <div className="fixed inset-0 z-40" onClick={() => setIsExportMenuOpen(false)}></div>
+                )}
+            </div>
+            
+            {isAdmin && (
+              <Button onClick={() => handleOpenModal()} icon={Plus}>
+              {t.new_employee}
+              </Button>
+            )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -242,9 +411,11 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
                         </div>
                     </div>
                     
-                    <div className="border-t pt-3 flex justify-end">
-                        {renderActions(emp)}
-                    </div>
+                    {isAdmin && (
+                      <div className="border-t pt-3 flex justify-end">
+                          {renderActions(emp)}
+                      </div>
+                    )}
                 </div>
             ))
          ) : (
@@ -253,7 +424,7 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
       </div>
 
       {/* Desktop Table View */}
-      <div className="hidden md:block bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+      <div ref={tableRef} className="hidden md:block bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -264,7 +435,7 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
                 <th className="px-6 py-4">Assignment</th>
                 <th className="px-6 py-4">Entry Date</th>
                 <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4 text-right">Actions</th>
+                {isAdmin && <th className="px-6 py-4 text-right">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -304,14 +475,16 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
                          <span className="text-xs text-green-600 font-medium">Active</span>
                        )}
                     </td>
-                    <td className="px-6 py-3 text-right">
-                      {renderActions(emp)}
-                    </td>
+                    {isAdmin && (
+                      <td className="px-6 py-3 text-right">
+                        {renderActions(emp)}
+                      </td>
+                    )}
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-gray-400">
+                  <td colSpan={isAdmin ? 7 : 6} className="px-6 py-12 text-center text-gray-400">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <User size={32} className="opacity-50" />
                       <p>No employees found</p>
@@ -374,7 +547,7 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
         )}
       </div>
 
-      {/* Edit/Create Modal */}
+      {/* Edit/Create Modal (Restricted) */}
       <Modal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
@@ -450,7 +623,7 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
         </form>
       </Modal>
 
-      {/* Exit Date Modal */}
+      {/* Exit Date Modal (Restricted) */}
       <Modal
         isOpen={isExitModalOpen}
         onClose={() => setIsExitModalOpen(false)}

@@ -1,12 +1,13 @@
 
 import React, { useState } from 'react';
-import { Plus, Trash2, CheckSquare, Square, Globe, Briefcase, Users as UsersIcon, Clock, Edit2, CalendarOff, CalendarDays } from 'lucide-react';
-import { AppSettings, Team, Employee, Shift, Holiday, AbsenceType } from '../types';
+import { Plus, Trash2, CheckSquare, Square, Globe, Briefcase, Users as UsersIcon, Clock, Edit2, CalendarOff, CalendarDays, List, MapPin } from 'lucide-react';
+import { AppSettings, Team, Employee, Shift, Holiday, AbsenceType, User } from '../types';
 import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
 import { TRANSLATIONS, formatDisplayDate } from '../constants';
 
 interface SettingsProps {
+  currentUser: User;
   settings: AppSettings;
   teams: Team[];
   employees: Employee[];
@@ -17,13 +18,19 @@ interface SettingsProps {
 }
 
 export const Settings: React.FC<SettingsProps> = ({ 
-  settings, teams, employees, onUpdateSettings, onAddTeam, onUpdateTeam, onDeleteTeam 
+  currentUser, settings, teams, employees, onUpdateSettings, onAddTeam, onUpdateTeam, onDeleteTeam 
 }) => {
   const t = TRANSLATIONS[settings.language];
+  const isAdmin = currentUser.role === 'admin';
   
   const [newCategory, setNewCategory] = useState('');
-  const [newAbsenceType, setNewAbsenceType] = useState<AbsenceType>({ name: '', color: '#9ca3af' });
+  const [newAssignment, setNewAssignment] = useState('');
   
+  // Absence State
+  const [isAbsenceModalOpen, setIsAbsenceModalOpen] = useState(false);
+  const [editingAbsenceOldName, setEditingAbsenceOldName] = useState<string | null>(null);
+  const [absenceForm, setAbsenceForm] = useState<AbsenceType>({ name: '', color: '#9ca3af' });
+
   // Holiday State
   const [newHolidayDate, setNewHolidayDate] = useState('');
   const [newHolidayName, setNewHolidayName] = useState('');
@@ -53,16 +60,55 @@ export const Settings: React.FC<SettingsProps> = ({
     onUpdateSettings('categories', settings.categories.filter(c => c !== cat));
   };
 
-  // Absence Type Handlers
-  const handleAddAbsence = () => {
-    if (newAbsenceType.name && !settings.absenceTypes.some(a => a.name === newAbsenceType.name)) {
-      onUpdateSettings('absenceTypes', [...settings.absenceTypes, newAbsenceType]);
-      setNewAbsenceType({ name: '', color: '#9ca3af' });
+  // Assignment Handlers
+  const handleAddAssignment = () => {
+    if (newAssignment && !settings.assignments.includes(newAssignment)) {
+        onUpdateSettings('assignments', [...settings.assignments, newAssignment]);
+        setNewAssignment('');
     }
   };
 
+  const handleRemoveAssignment = (assign: string) => {
+      onUpdateSettings('assignments', settings.assignments.filter(a => a !== assign));
+  };
+
+  // Absence Type Handlers
+  const handleOpenAbsenceModal = (abs?: AbsenceType) => {
+      if (abs) {
+          setEditingAbsenceOldName(abs.name);
+          setAbsenceForm(abs);
+      } else {
+          setEditingAbsenceOldName(null);
+          setAbsenceForm({ name: '', color: '#9ca3af' });
+      }
+      setIsAbsenceModalOpen(true);
+  };
+
+  const handleSaveAbsence = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!absenceForm.name) return;
+      
+      let newAbsences = [...settings.absenceTypes];
+      
+      if (editingAbsenceOldName) {
+          // Edit mode
+          newAbsences = newAbsences.map(a => a.name === editingAbsenceOldName ? absenceForm : a);
+      } else {
+          // Add mode
+          if (newAbsences.some(a => a.name === absenceForm.name)) {
+              alert("Name already exists");
+              return;
+          }
+          newAbsences.push(absenceForm);
+      }
+      onUpdateSettings('absenceTypes', newAbsences);
+      setIsAbsenceModalOpen(false);
+  };
+
   const handleRemoveAbsence = (absName: string) => {
-    onUpdateSettings('absenceTypes', settings.absenceTypes.filter(a => a.name !== absName));
+    if(window.confirm(t.delete + '?')) {
+        onUpdateSettings('absenceTypes', settings.absenceTypes.filter(a => a.name !== absName));
+    }
   };
 
   // Holiday Handlers
@@ -185,17 +231,19 @@ export const Settings: React.FC<SettingsProps> = ({
     }
   };
 
+  // Filter: Employees must NOT be in a team, OR they must be in the team currently being edited.
+  // This prevents assigning an employee who already belongs to another team.
   const availableEmployees = employees.filter(e => 
     !e.teamId || (editingTeamId && e.teamId === editingTeamId)
   );
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 max-w-6xl mx-auto">
+    <div className="space-y-8 animate-in fade-in duration-500 max-w-6xl mx-auto pb-10">
       <div>
         <h2 className="text-2xl font-bold text-gray-800">{t.settings}</h2>
       </div>
 
-      {/* GLOBAL SETTINGS SECTION */}
+      {/* GLOBAL SETTINGS SECTION - Visible to Everyone */}
       <section>
         <h3 className="text-sm uppercase tracking-wider text-gray-500 font-semibold mb-4 flex items-center gap-2">
           <Globe size={16} /> {t.general_settings}
@@ -203,24 +251,24 @@ export const Settings: React.FC<SettingsProps> = ({
         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Langue / Language</label>
+              <label className="block text-xs font-medium text-gray-700 mb-2">Langue / Language</label>
               <select 
                 value={settings.language}
                 onChange={(e) => onUpdateSettings('language', e.target.value)}
-                className="w-full p-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full p-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               >
                 <option value="fr">Français</option>
                 <option value="en">English</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-xs font-medium text-gray-700 mb-2">
                 {settings.language === 'fr' ? 'Format de date' : 'Date Format'}
               </label>
               <select 
                 value={settings.dateFormat}
                 onChange={(e) => onUpdateSettings('dateFormat', e.target.value)}
-                className="w-full p-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full p-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               >
                 <option value="DD/MM/YYYY">DD/MM/YYYY</option>
                 <option value="YYYY-MM-DD">YYYY-MM-DD</option>
@@ -231,211 +279,244 @@ export const Settings: React.FC<SettingsProps> = ({
         </div>
       </section>
 
-      {/* PUBLIC HOLIDAYS SECTION */}
-      <section>
-        <h3 className="text-sm uppercase tracking-wider text-gray-500 font-semibold mb-4 flex items-center gap-2">
-          <CalendarDays size={16} /> {t.holidays}
-        </h3>
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-          <form onSubmit={handleAddHoliday} className="flex flex-col sm:flex-row gap-2 mb-4 bg-gray-50 p-3 rounded-lg border border-gray-100">
-            <input 
-              required
-              type="date"
-              value={newHolidayDate}
-              onChange={(e) => setNewHolidayDate(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-            />
-            <input 
-              required
-              type="text" 
-              value={newHolidayName} 
-              onChange={(e) => setNewHolidayName(e.target.value)}
-              placeholder="Ex: New Year"
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-            />
-            <div className="flex gap-1">
-              {editingHolidayOldDate && (
-                 <Button type="button" variant="ghost" size="sm" onClick={handleCancelEditHoliday}>
-                   {t.cancel}
-                 </Button>
-              )}
-              <Button type="submit" size="sm">
-                {editingHolidayOldDate ? t.update : t.add}
-              </Button>
-            </div>
-          </form>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-            {settings.holidays.length === 0 ? <p className="text-sm text-gray-400 italic">No holidays configured</p> : null}
-            {settings.holidays.map(h => (
-               <div key={h.date} className="flex items-center justify-between p-2 bg-white rounded border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                  <div className="flex flex-col">
-                    <span className="text-xs font-bold text-gray-800">{formatDisplayDate(h.date, settings.dateFormat)}</span>
-                    <span className="text-sm text-gray-600">{h.name}</span>
-                  </div>
-                  <div className="flex gap-1">
-                    <button onClick={() => handleEditHoliday(h)} className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title={t.edit}>
-                       <Edit2 size={14} />
-                    </button>
-                    <button onClick={() => handleRemoveHoliday(h.date)} className="p-1.5 text-red-400 hover:text-red-700 hover:bg-red-50 rounded transition-colors" title={t.delete}>
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* SHIFT & ABSENCE SETTINGS SECTION */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm uppercase tracking-wider text-gray-500 font-semibold flex items-center gap-2">
-              <Clock size={16} /> Shifts
-            </h3>
-            <Button onClick={() => handleOpenShiftModal()} icon={Plus} size="sm">
-              {t.add}
-            </Button>
-          </div>
-          <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-            <div className="space-y-3">
-              {settings.shifts.map((shift, index) => (
-                <div key={index} className="flex items-center justify-between p-3 border border-gray-100 rounded-lg bg-gray-50">
-                  <div className="flex items-center gap-3">
-                    <div className="w-4 h-4 rounded-full shadow-sm" style={{ backgroundColor: shift.color || '#3b82f6' }}></div>
-                    <div>
-                      <div className="font-semibold text-gray-800 text-sm">{shift.name}</div>
-                      <div className="text-xs text-gray-500">{shift.start} - {shift.end}</div>
+      {/* ADMIN ONLY SECTIONS */}
+      {isAdmin && (
+        <>
+            {/* SHIFT & ABSENCE SETTINGS SECTION (SIDE BY SIDE) */}
+            <div className="flex flex-col lg:flex-row gap-8">
+                <section className="flex flex-col flex-1">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm uppercase tracking-wider text-gray-500 font-semibold flex items-center gap-2">
+                    <Clock size={16} /> Shifts
+                    </h3>
+                    <Button onClick={() => handleOpenShiftModal()} icon={Plus} size="sm">
+                    {t.add}
+                    </Button>
+                </div>
+                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex-1">
+                    <div className="space-y-3">
+                    {settings.shifts.map((shift, index) => (
+                        <div key={index} className="flex items-center justify-between p-3 border border-gray-100 rounded-lg bg-gray-50">
+                        <div className="flex items-center gap-3">
+                            <div className="w-4 h-4 rounded-full shadow-sm" style={{ backgroundColor: shift.color || '#3b82f6' }}></div>
+                            <div>
+                            <div className="font-semibold text-gray-800 text-sm">{shift.name}</div>
+                            <div className="text-xs text-gray-500">{shift.start} - {shift.end}</div>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => handleOpenShiftModal(index)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded hover:bg-white transition-colors">
+                            <Edit2 size={14} />
+                            </button>
+                            <button onClick={() => handleDeleteShift(index)} className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-white transition-colors">
+                            <Trash2 size={14} />
+                            </button>
+                        </div>
+                        </div>
+                    ))}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => handleOpenShiftModal(index)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded hover:bg-white transition-colors">
-                      <Edit2 size={14} />
-                    </button>
-                    <button onClick={() => handleDeleteShift(index)} className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-white transition-colors">
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        </section>
+                </section>
 
-        <section>
-          <h3 className="text-sm uppercase tracking-wider text-gray-500 font-semibold mb-4 flex items-center gap-2">
-            <CalendarOff size={16} /> {t.absence_types}
-          </h3>
-          <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-            <div className="flex gap-2 mb-4">
-              <input 
-                type="text" 
-                value={newAbsenceType.name} 
-                onChange={(e) => setNewAbsenceType({...newAbsenceType, name: e.target.value})}
-                placeholder="Ex: Maladie..."
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-              />
-              <div className="flex items-center gap-1 border border-gray-300 rounded-lg px-2 bg-white">
-                <input 
-                  type="color" 
-                  value={newAbsenceType.color}
-                  onChange={(e) => setNewAbsenceType({...newAbsenceType, color: e.target.value})}
-                  className="w-6 h-6 border-0 p-0 cursor-pointer"
-                />
-              </div>
-              <Button onClick={handleAddAbsence} size="sm">{t.add}</Button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {settings.absenceTypes.map(abs => (
-                <div key={abs.name} className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 text-gray-700 rounded-full border border-gray-200 shadow-sm group">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: abs.color }}></div>
-                  <span className="text-xs font-medium">{abs.name}</span>
-                  <button onClick={() => handleRemoveAbsence(abs.name)} className="text-gray-400 hover:text-red-600 ml-1">
-                    <Trash2 size={12} />
-                  </button>
+                <section className="flex flex-col flex-1">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm uppercase tracking-wider text-gray-500 font-semibold flex items-center gap-2">
+                        <CalendarOff size={16} /> {t.absence_types}
+                    </h3>
+                    <Button onClick={() => handleOpenAbsenceModal()} icon={Plus} size="sm">
+                    {t.add}
+                    </Button>
                 </div>
-              ))}
+                
+                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex-1">
+                    <div className="space-y-3">
+                    {settings.absenceTypes.map(abs => (
+                        <div key={abs.name} className="flex items-center justify-between p-3 border border-gray-100 rounded-lg bg-gray-50">
+                        <div className="flex items-center gap-3">
+                            <div className="w-4 h-4 rounded-full shadow-sm" style={{ backgroundColor: abs.color }}></div>
+                            <span className="font-semibold text-gray-800 text-sm">{abs.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => handleOpenAbsenceModal(abs)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded hover:bg-white transition-colors">
+                            <Edit2 size={14} />
+                            </button>
+                            <button onClick={() => handleRemoveAbsence(abs.name)} className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-white transition-colors">
+                            <Trash2 size={14} />
+                            </button>
+                        </div>
+                        </div>
+                    ))}
+                    </div>
+                </div>
+                </section>
             </div>
-          </div>
-        </section>
-      </div>
 
-      {/* TEAM MANAGEMENT SECTION */}
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm uppercase tracking-wider text-gray-500 font-semibold flex items-center gap-2">
-            <UsersIcon size={16} /> {t.teams}
-          </h3>
-          <Button onClick={() => handleOpenTeamModal()} icon={Plus} size="sm">
-            {t.create}
-          </Button>
-        </div>
-        
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {teams.length === 0 && (
-              <div className="col-span-full text-center py-8 text-gray-400 italic">
-                {settings.language === 'fr' ? 'Aucune équipe créée.' : 'No teams created.'}
-              </div>
-            )}
-            {teams.map(team => {
-              const leader = employees.find(e => e.id === team.leaderId);
-              return (
-                <div key={team.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow relative bg-gray-50/50">
-                  <div className="flex justify-between items-start mb-2">
-                    <h4 className="font-bold text-lg text-gray-800">{team.name}</h4>
+            {/* TEAM MANAGEMENT SECTION */}
+            <section>
+                <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm uppercase tracking-wider text-gray-500 font-semibold flex items-center gap-2">
+                    <UsersIcon size={16} /> {t.teams}
+                </h3>
+                <Button onClick={() => handleOpenTeamModal()} icon={Plus} size="sm">
+                    {t.create}
+                </Button>
+                </div>
+                
+                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {teams.length === 0 && (
+                    <div className="col-span-full text-center py-8 text-gray-400 italic">
+                        {settings.language === 'fr' ? 'Aucune équipe créée.' : 'No teams created.'}
+                    </div>
+                    )}
+                    {teams.map(team => {
+                    const leader = employees.find(e => e.id === team.leaderId);
+                    return (
+                        <div key={team.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow relative bg-gray-50/50">
+                        <div className="flex justify-between items-start mb-2">
+                            <h4 className="font-bold text-lg text-gray-800">{team.name}</h4>
+                            <div className="flex gap-1">
+                            <button onClick={() => handleOpenTeamModal(team)} className="text-gray-400 hover:text-blue-500 transition-colors p-1">
+                                <Edit2 size={18} />
+                            </button>
+                            <button onClick={() => onDeleteTeam(team.id)} className="text-gray-400 hover:text-red-500 transition-colors p-1">
+                                <Trash2 size={18} />
+                            </button>
+                            </div>
+                        </div>
+                        <div className="text-sm mb-3">
+                            <span className="text-gray-500">{t.team_leader}: </span>
+                            <span className="font-medium text-gray-900">{leader ? `${leader.firstName} ${leader.lastName}` : '-'}</span>
+                        </div>
+                        <div className="text-xs text-gray-500 bg-white p-2 rounded border border-gray-100">
+                            {team.members.length} {t.team_members}
+                        </div>
+                        </div>
+                    );
+                    })}
+                </div>
+                </div>
+            </section>
+
+            {/* PUBLIC HOLIDAYS SECTION */}
+            <section>
+                <h3 className="text-sm uppercase tracking-wider text-gray-500 font-semibold mb-4 flex items-center gap-2">
+                <CalendarDays size={16} /> {t.holidays}
+                </h3>
+                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                <form onSubmit={handleAddHoliday} className="flex flex-col sm:flex-row gap-2 mb-4 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    <input 
+                    required
+                    type="date"
+                    value={newHolidayDate}
+                    onChange={(e) => setNewHolidayDate(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                    <input 
+                    required
+                    type="text" 
+                    value={newHolidayName} 
+                    onChange={(e) => setNewHolidayName(e.target.value)}
+                    placeholder="Ex: New Year"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    />
                     <div className="flex gap-1">
-                      <button onClick={() => handleOpenTeamModal(team)} className="text-gray-400 hover:text-blue-500 transition-colors p-1">
-                        <Edit2 size={18} />
-                      </button>
-                      <button onClick={() => onDeleteTeam(team.id)} className="text-gray-400 hover:text-red-500 transition-colors p-1">
-                        <Trash2 size={18} />
-                      </button>
+                    {editingHolidayOldDate && (
+                        <Button type="button" variant="ghost" size="sm" onClick={handleCancelEditHoliday}>
+                        {t.cancel}
+                        </Button>
+                    )}
+                    <Button type="submit" size="sm">
+                        {editingHolidayOldDate ? t.update : t.add}
+                    </Button>
                     </div>
-                  </div>
-                  <div className="text-sm mb-3">
-                    <span className="text-gray-500">{t.team_leader}: </span>
-                    <span className="font-medium text-gray-900">{leader ? `${leader.firstName} ${leader.lastName}` : '-'}</span>
-                  </div>
-                  <div className="text-xs text-gray-500 bg-white p-2 rounded border border-gray-100">
-                    {team.members.length} {t.team_members}
-                  </div>
+                </form>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {settings.holidays.length === 0 ? <p className="text-sm text-gray-400 italic">No holidays configured</p> : null}
+                    {settings.holidays.map(h => (
+                    <div key={h.date} className="flex items-center justify-between p-2 bg-white rounded border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="flex flex-col">
+                            <span className="text-xs font-bold text-gray-800">{formatDisplayDate(h.date, settings.dateFormat)}</span>
+                            <span className="text-sm text-gray-600">{h.name}</span>
+                        </div>
+                        <div className="flex gap-1">
+                            <button onClick={() => handleEditHoliday(h)} className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title={t.edit}>
+                            <Edit2 size={14} />
+                            </button>
+                            <button onClick={() => handleRemoveHoliday(h.date)} className="p-1.5 text-red-400 hover:text-red-700 hover:bg-red-50 rounded transition-colors" title={t.delete}>
+                            <Trash2 size={14} />
+                            </button>
+                        </div>
+                    </div>
+                    ))}
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
+                </div>
+            </section>
 
-      {/* CATEGORIES SECTION */}
-      <section>
-        <h3 className="text-sm uppercase tracking-wider text-gray-500 font-semibold mb-4 flex items-center gap-2">
-          <Briefcase size={16} /> {settings.language === 'fr' ? 'Catégories' : 'Categories'}
-        </h3>
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-          <div className="flex gap-2 mb-4">
-            <input 
-              type="text" 
-              value={newCategory} 
-              onChange={(e) => setNewCategory(e.target.value)}
-              placeholder={settings.language === 'fr' ? "Nouvelle catégorie..." : "New category..."}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-            />
-            <Button onClick={handleAddCategory} size="sm">{t.add}</Button>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {settings.categories.map(cat => (
-              <div key={cat} className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full border border-blue-100 group">
-                <span className="text-xs font-medium">{cat}</span>
-                <button onClick={() => handleRemoveCategory(cat)} className="text-blue-400 hover:text-blue-700">
-                  <Trash2 size={12} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+            {/* CATEGORIES & ASSIGNMENTS SECTION */}
+            <div className="flex flex-col lg:flex-row gap-8">
+                {/* CATEGORIES */}
+                <section className="flex-1">
+                <h3 className="text-sm uppercase tracking-wider text-gray-500 font-semibold mb-4 flex items-center gap-2">
+                    <Briefcase size={16} /> {settings.language === 'fr' ? 'Catégories' : 'Categories'}
+                </h3>
+                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm h-full">
+                    <div className="flex gap-2 mb-4">
+                    <input 
+                        type="text" 
+                        value={newCategory} 
+                        onChange={(e) => setNewCategory(e.target.value)}
+                        placeholder={settings.language === 'fr' ? "Nouvelle catégorie..." : "New category..."}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                    <Button onClick={handleAddCategory} size="sm">{t.add}</Button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                    {settings.categories.map(cat => (
+                        <div key={cat} className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full border border-blue-100 group">
+                        <span className="text-xs font-medium">{cat}</span>
+                        <button onClick={() => handleRemoveCategory(cat)} className="text-blue-400 hover:text-blue-700">
+                            <Trash2 size={12} />
+                        </button>
+                        </div>
+                    ))}
+                    </div>
+                </div>
+                </section>
+
+                {/* ASSIGNMENTS */}
+                <section className="flex-1">
+                <h3 className="text-sm uppercase tracking-wider text-gray-500 font-semibold mb-4 flex items-center gap-2">
+                    <MapPin size={16} /> Assignments
+                </h3>
+                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm h-full">
+                    <div className="flex gap-2 mb-4">
+                    <input 
+                        type="text" 
+                        value={newAssignment} 
+                        onChange={(e) => setNewAssignment(e.target.value)}
+                        placeholder="New assignment..."
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                    <Button onClick={handleAddAssignment} size="sm">{t.add}</Button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                    {settings.assignments.map(assign => (
+                        <div key={assign} className="flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 rounded-full border border-green-100 group">
+                        <span className="text-xs font-medium">{assign}</span>
+                        <button onClick={() => handleRemoveAssignment(assign)} className="text-green-400 hover:text-green-700">
+                            <Trash2 size={12} />
+                        </button>
+                        </div>
+                    ))}
+                    </div>
+                </div>
+                </section>
+            </div>
+        </>
+      )}
+
 
       {/* CREATE/EDIT TEAM MODAL */}
       <Modal
@@ -482,8 +563,8 @@ export const Settings: React.FC<SettingsProps> = ({
               {availableEmployees.length === 0 ? (
                 <p className="text-xs text-gray-500 p-2 text-center">
                   {settings.language === 'fr' 
-                    ? 'Aucun employé disponible.' 
-                    : 'No employees available.'}
+                    ? 'Aucun employé disponible (tous sont assignés).' 
+                    : 'No available employees (all are assigned).'}
                 </p>
               ) : (
                 availableEmployees.map(emp => (
@@ -577,6 +658,48 @@ export const Settings: React.FC<SettingsProps> = ({
               {t.save}
             </Button>
           </div>
+        </form>
+      </Modal>
+
+      {/* CREATE/EDIT ABSENCE MODAL */}
+      <Modal
+        isOpen={isAbsenceModalOpen}
+        onClose={() => setIsAbsenceModalOpen(false)}
+        title={editingAbsenceOldName ? (settings.language === 'fr' ? 'Modifier le motif' : 'Edit Absence Type') : (settings.language === 'fr' ? 'Nouveau motif' : 'New Absence Type')}
+        size="sm"
+      >
+        <form onSubmit={handleSaveAbsence} className="space-y-4">
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                <input 
+                    required
+                    type="text" 
+                    value={absenceForm.name} 
+                    onChange={(e) => setAbsenceForm({...absenceForm, name: e.target.value})}
+                    placeholder="Ex: Sick Leave"
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+            </div>
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
+                <div className="flex gap-2 items-center">
+                    <input 
+                        type="color" 
+                        value={absenceForm.color}
+                        onChange={(e) => setAbsenceForm({...absenceForm, color: e.target.value})}
+                        className="h-10 w-20 rounded cursor-pointer border-0"
+                    />
+                    <span className="text-xs text-gray-500">{absenceForm.color}</span>
+                </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-4 border-t">
+                <Button type="button" variant="ghost" onClick={() => setIsAbsenceModalOpen(false)}>
+                    {t.cancel}
+                </Button>
+                <Button type="submit">
+                    {t.save}
+                </Button>
+            </div>
         </form>
       </Modal>
     </div>

@@ -1,7 +1,8 @@
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { AppSettings, Bonus as BonusType, Employee, Team, User } from '../types';
 import { TRANSLATIONS } from '../constants';
-import { Filter, Award, Search, History, Download, FileText, Image as ImageIcon, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { Filter, Award, Search, History, Download, FileText, Image as ImageIcon, ChevronLeft, ChevronRight, ChevronDown, LayoutList, Grid, Lock } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -19,17 +20,31 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
   const t = TRANSLATIONS[settings.language];
   const historyRef = useRef<HTMLDivElement>(null);
   
+  // Calculate current month in local time for default and validation
+  const currentMonthStr = useMemo(() => {
+     const now = new Date();
+     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }, []);
+
   const [selectedTeam, setSelectedTeam] = useState<string>('');
-  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7)); // YYYY-MM
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr);
   const [searchTerm, setSearchTerm] = useState('');
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   
+  // Mobile View State
+  const [mobileView, setMobileView] = useState<'list' | 'card'>('list');
+  const [currentCardIndex, setCurrentCardIndex] = useState(0);
+
+  // Input Pagination State
+  const [inputItemsPerPage, setInputItemsPerPage] = useState<number | 'all'>(25);
+  const [inputCurrentPage, setInputCurrentPage] = useState(1);
+
   // History Filters
-  const [historyStartMonth, setHistoryStartMonth] = useState('');
-  const [historyEndMonth, setHistoryEndMonth] = useState('');
   const [historyPersonFilter, setHistoryPersonFilter] = useState('');
+  const [historyMonthsToShow, setHistoryMonthsToShow] = useState<number>(3);
+  const [historyPageOffset, setHistoryPageOffset] = useState(0); // 0 = most recent page
   
-  // Pagination State for History
+  // Pagination State for History Rows (Employees)
   const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(10);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -60,6 +75,24 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
     }).sort((a, b) => a.firstName.localeCompare(b.firstName)); // Alphabetical Sort
   }, [employees, selectedTeam, searchTerm, isManager, managedTeam]);
 
+  // Reset card index and pagination when list changes
+  useEffect(() => {
+    setCurrentCardIndex(0);
+    setInputCurrentPage(1);
+  }, [eligibleEmployees.length, selectedTeam, searchTerm]);
+
+  // Pagination Logic for Input
+  const totalInputItems = eligibleEmployees.length;
+  const totalInputPages = inputItemsPerPage === 'all' ? 1 : Math.ceil(totalInputItems / inputItemsPerPage);
+  
+  const paginatedInputEmployees = inputItemsPerPage === 'all' 
+    ? eligibleEmployees 
+    : eligibleEmployees.slice((inputCurrentPage - 1) * inputItemsPerPage, inputCurrentPage * inputItemsPerPage);
+
+  const startInputItem = inputItemsPerPage === 'all' ? 1 : (inputCurrentPage - 1) * (inputItemsPerPage as number) + 1;
+  const endInputItem = inputItemsPerPage === 'all' ? totalInputItems : Math.min(inputCurrentPage * (inputItemsPerPage as number), totalInputItems);
+
+
   const getBonusAmount = (empId: number, month: string) => {
     const bonus = bonuses.find(b => b.employeeId === empId && b.month === month);
     return bonus ? bonus.amount : '';
@@ -72,6 +105,25 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
     }
   };
 
+  const handlePrevCard = () => {
+    if (currentCardIndex > 0) setCurrentCardIndex(prev => prev - 1);
+  };
+
+  const handleNextCard = () => {
+    if (currentCardIndex < eligibleEmployees.length - 1) setCurrentCardIndex(prev => prev + 1);
+  };
+
+  const changeSelectedMonth = (delta: number) => {
+      const [year, month] = selectedMonth.split('-').map(Number);
+      const date = new Date(year, month - 1 + delta, 1);
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      setSelectedMonth(`${y}-${m}`);
+  };
+
+  // Determine if input should be disabled (Future months)
+  const isInputDisabled = selectedMonth > currentMonthStr;
+
   // Helper to get formatted filename
   const getExportFilename = (prefix: string) => {
       const now = new Date();
@@ -81,21 +133,61 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
       return `${prefix}_${dateStr}_${timeStr}`;
   };
 
+  // Helper to format month header
+  const formatMonthHeader = (yyyyMm: string) => {
+      const d = new Date(`${yyyyMm}-01`);
+      const str = d.toLocaleDateString(settings.language === 'fr' ? 'fr-FR' : 'en-US', { month: 'short', year: 'numeric' });
+      // Capitalize first letter
+      return str.charAt(0).toUpperCase() + str.slice(1);
+  };
+
   // PIVOT TABLE LOGIC FOR HISTORY
-  // 1. Get unique months
-  let uniqueMonths = Array.from(new Set(bonuses.map(b => b.month))).sort().reverse();
+  // 1. Determine anchor month (max of current date or latest bonus)
+  // Re-using currentMonthStr from top level scope
   
-  // 2. Filter months
-  if (historyStartMonth || historyEndMonth) {
-      uniqueMonths = uniqueMonths.filter(m => {
-          if (historyStartMonth && m < historyStartMonth) return false;
-          if (historyEndMonth && m > historyEndMonth) return false;
-          return true;
-      });
-  } else {
-      // Default: Show last 4 months if no specific range provided
-      uniqueMonths = uniqueMonths.slice(0, 4);
-  }
+  const { maxBonusMonth, minBonusMonth } = useMemo(() => {
+    if (bonuses.length === 0) return { maxBonusMonth: currentMonthStr, minBonusMonth: currentMonthStr };
+    const sorted = bonuses.map(b => b.month).sort(); // ascending
+    return { maxBonusMonth: sorted[sorted.length - 1], minBonusMonth: sorted[0] };
+  }, [bonuses, currentMonthStr]);
+
+  const anchorMonthStr = maxBonusMonth > currentMonthStr ? maxBonusMonth : currentMonthStr;
+
+  // 2. Generate visible months based on pagination (Procedural generation to ensure fixed count)
+  const visibleMonths = useMemo(() => {
+    const months = [];
+    const [anchorYear, anchorMonth] = anchorMonthStr.split('-').map(Number);
+    
+    // Start index for this page
+    const startOffset = historyPageOffset * historyMonthsToShow;
+    
+    for (let i = 0; i < historyMonthsToShow; i++) {
+        // Javascript Date month is 0-11. anchorMonth is 1-12.
+        const d = new Date(anchorYear, (anchorMonth - 1) - (startOffset + i), 1);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        months.push(`${y}-${m}`);
+    }
+    // Reverse to show Oldest (Left) -> Newest (Right)
+    return months.reverse();
+  }, [anchorMonthStr, historyPageOffset, historyMonthsToShow]);
+
+  const hasNewerMonths = historyPageOffset > 0;
+  // Enable Older button (Left) if the oldest displayed month (index 0) is still newer than our oldest data
+  const hasOlderMonths = visibleMonths.length > 0 && visibleMonths[0] > minBonusMonth; 
+
+  const handleHistoryNext = () => {
+      if (hasOlderMonths) setHistoryPageOffset(p => p + 1); // Go Older (Increase offset)
+  };
+
+  const handleHistoryPrev = () => {
+      if (hasNewerMonths) setHistoryPageOffset(p => p - 1); // Go Newer (Decrease offset)
+  };
+
+  const handleMonthsCountChange = (val: number) => {
+      setHistoryMonthsToShow(val);
+      setHistoryPageOffset(0);
+  };
 
   // 3. Get Employees for History and Filter
   const employeesWithBonuses = employees.filter(emp => {
@@ -112,7 +204,7 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
       return hasBonus && matchesName && inTeam;
   }).sort((a, b) => a.firstName.localeCompare(b.firstName));
 
-  // 4. Pagination Logic
+  // 4. Pagination Logic for Rows
   const totalItems = employeesWithBonuses.length;
   const totalPages = itemsPerPage === 'all' ? 1 : Math.ceil(totalItems / itemsPerPage);
   
@@ -134,12 +226,12 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
           
           const columns: { header: string; dataKey: string }[] = [
               { header: 'Employee', dataKey: 'name' },
-              ...uniqueMonths.map(m => ({ header: m, dataKey: m }))
+              ...visibleMonths.map(m => ({ header: formatMonthHeader(m), dataKey: m }))
           ];
 
           const data = employeesWithBonuses.map(emp => {
               const row: Record<string, string | number> = { name: `${emp.firstName} ${emp.lastName}` };
-              uniqueMonths.forEach(m => {
+              visibleMonths.forEach(m => {
                   row[m] = getBonusAmount(emp.id, m);
               });
               return row;
@@ -201,6 +293,8 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
       }
   };
 
+  const currentEmployee = eligibleEmployees[currentCardIndex];
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -235,12 +329,26 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
                     </div>
                     <div>
                          <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Month</label>
-                         <input 
-                            type="month" 
-                            value={selectedMonth}
-                            onChange={(e) => setSelectedMonth(e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none"
-                        />
+                         <div className="flex items-center gap-1">
+                             <button 
+                                onClick={() => changeSelectedMonth(-1)}
+                                className="p-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
+                             >
+                                <ChevronLeft size={16} />
+                             </button>
+                             <input 
+                                type="month" 
+                                value={selectedMonth}
+                                onChange={(e) => setSelectedMonth(e.target.value)}
+                                className={`w-full px-3 py-2 rounded-lg border focus:outline-none ${isInputDisabled ? 'border-orange-200 bg-orange-50 text-orange-800' : 'border-gray-200'}`}
+                            />
+                             <button 
+                                onClick={() => changeSelectedMonth(1)}
+                                className="p-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
+                             >
+                                <ChevronRight size={16} />
+                             </button>
+                        </div>
                     </div>
                  </div>
                  <div>
@@ -254,17 +362,100 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
                  </div>
             </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col h-[400px]">
-                {/* Logic: Show table if Admin (even with no team selected) OR if Manager */}
-                {(!isManager && !selectedTeam) ? (
-                     <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8 text-center">
-                        <Award size={48} className="opacity-30 text-blue-500 mb-2" />
-                        <p>{t.select_team} (or see all below if configured)</p>
-                        <p className="text-xs mt-2">Admins can see all eligible employees if no team is selected.</p>
-                     </div>
-                ) : null}
+            {/* Mobile View Switcher */}
+            <div className="md:hidden flex bg-white rounded-lg border border-gray-200 p-1 w-full">
+                <button 
+                    onClick={() => setMobileView('list')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all ${mobileView === 'list' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}
+                >
+                    <LayoutList size={16} />
+                    {settings.language === 'fr' ? 'Liste' : 'List'}
+                </button>
+                <button 
+                    onClick={() => setMobileView('card')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all ${mobileView === 'card' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}
+                >
+                    <Grid size={16} />
+                    {settings.language === 'fr' ? 'Cartes' : 'Cards'}
+                </button>
+            </div>
 
-                {/* Actually, prompt said "Admins show all by default". So we show table always unless empty. */}
+            {/* CARD VIEW (Mobile Only) */}
+            {mobileView === 'card' && (
+                <div className="md:hidden bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex flex-col items-center text-center space-y-6 min-h-[300px] justify-center relative">
+                    {eligibleEmployees.length > 0 && currentEmployee ? (
+                        <>
+                             {/* Employee Info */}
+                             <div className="space-y-2">
+                                <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xl font-bold mx-auto">
+                                    {currentEmployee.firstName[0]}
+                                    {currentEmployee.lastName[0]}
+                                </div>
+                                <h4 className="text-xl font-bold text-gray-900">
+                                    {currentEmployee.firstName} {currentEmployee.lastName}
+                                </h4>
+                                <p className="text-sm text-gray-500 font-mono">
+                                    {currentEmployee.matricule}
+                                </p>
+                             </div>
+
+                             {/* Input */}
+                             <div className="w-full max-w-[200px] relative">
+                                <label className="block text-xs font-semibold text-gray-500 uppercase mb-2">
+                                    {t.score}
+                                </label>
+                                {isInputDisabled && (
+                                    <div className="absolute top-8 right-3 text-gray-400 z-10">
+                                        <Lock size={16} />
+                                    </div>
+                                )}
+                                <input 
+                                    type="number" 
+                                    min="0"
+                                    placeholder={isInputDisabled ? "" : "0"}
+                                    disabled={isInputDisabled}
+                                    className={`w-full px-4 py-3 text-2xl text-center border-2 rounded-xl focus:ring-4 outline-none transition-all font-bold ${
+                                        isInputDisabled 
+                                        ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed' 
+                                        : 'border-gray-200 focus:ring-blue-100 focus:border-blue-500 text-blue-600'
+                                    }`}
+                                    value={getBonusAmount(currentEmployee.id, selectedMonth)}
+                                    onChange={(e) => handleScoreChange(currentEmployee.id, e.target.value)}
+                                />
+                             </div>
+
+                             {/* Navigation Footer */}
+                             <div className="w-full pt-4 flex items-center justify-between border-t border-gray-100 mt-auto">
+                                <button 
+                                    onClick={handlePrevCard}
+                                    disabled={currentCardIndex === 0}
+                                    className="p-3 rounded-full hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    <ChevronLeft size={24} />
+                                </button>
+                                <span className="text-sm font-medium text-gray-500">
+                                    {currentCardIndex + 1} / {eligibleEmployees.length}
+                                </span>
+                                <button 
+                                    onClick={handleNextCard}
+                                    disabled={currentCardIndex === eligibleEmployees.length - 1}
+                                    className="p-3 rounded-full hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    <ChevronRight size={24} />
+                                </button>
+                             </div>
+                        </>
+                    ) : (
+                        <div className="text-gray-400 flex flex-col items-center">
+                            <Search size={32} className="opacity-30 mb-2"/>
+                            <p>No employees found.</p>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* TABLE VIEW (Desktop & Mobile List) */}
+            <div className={`bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col min-h-[400px] ${mobileView === 'card' ? 'hidden md:flex' : 'flex'}`}>
                 <div className="overflow-y-auto flex-1">
                     <table className="w-full text-left border-collapse">
                     <thead className="sticky top-0 bg-white shadow-sm z-10">
@@ -274,11 +465,11 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        {eligibleEmployees.length > 0 ? (
-                        eligibleEmployees.map(emp => (
+                        {paginatedInputEmployees.length > 0 ? (
+                        paginatedInputEmployees.map(emp => (
                             <tr key={emp.id} className="hover:bg-gray-50/50">
                             <td className="px-6 py-4">
-                                <div className="font-medium text-gray-900">{emp.firstName} {emp.lastName}</div>
+                                <div className="font-medium text-sm text-gray-900">{emp.firstName} {emp.lastName}</div>
                                 <div className="text-xs text-gray-500">{emp.matricule}</div>
                             </td>
                             <td className="px-6 py-4 text-right">
@@ -286,7 +477,12 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
                                     type="number" 
                                     min="0"
                                     placeholder="0"
-                                    className="w-24 pl-2 pr-2 py-1 border rounded text-right focus:ring-2 focus:ring-green-500/20 focus:border-green-500 outline-none"
+                                    disabled={isInputDisabled}
+                                    className={`w-24 pl-2 pr-2 py-1 border rounded text-right outline-none ${
+                                        isInputDisabled
+                                        ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-200'
+                                        : 'focus:ring-2 focus:ring-green-500/20 focus:border-green-500'
+                                    }`}
                                     value={getBonusAmount(emp.id, selectedMonth)}
                                     onChange={(e) => handleScoreChange(emp.id, e.target.value)}
                                 />
@@ -303,6 +499,56 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
                     </tbody>
                     </table>
                 </div>
+
+                {/* Input Pagination Footer */}
+                {totalInputItems > 0 && (
+                    <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50">
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                            <span>{t.rows_per_page}:</span>
+                            <select 
+                                value={inputItemsPerPage} 
+                                onChange={(e) => { 
+                                    setInputItemsPerPage(e.target.value === 'all' ? 'all' : Number(e.target.value)); 
+                                    setInputCurrentPage(1); 
+                                }}
+                                className="bg-white border border-gray-300 rounded px-2 py-1 focus:outline-none"
+                            >
+                                <option value={25}>25</option>
+                                <option value={50}>50</option>
+                                <option value="all">{t.all}</option>
+                            </select>
+                            <span className="hidden sm:inline ml-4">
+                                {(t.showing_range as string)
+                                    .replace('{start}', String(startInputItem))
+                                    .replace('{end}', String(endInputItem))
+                                    .replace('{total}', String(totalInputItems))
+                                }
+                            </span>
+                        </div>
+
+                        {inputItemsPerPage !== 'all' && (
+                            <div className="flex items-center gap-1">
+                                <button 
+                                    disabled={inputCurrentPage === 1}
+                                    onClick={() => setInputCurrentPage(p => p - 1)}
+                                    className="p-1 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <ChevronLeft size={20} />
+                                </button>
+                                <span className="text-sm font-medium px-2">
+                                    {inputCurrentPage} / {totalInputPages}
+                                </span>
+                                <button 
+                                    disabled={inputCurrentPage === totalInputPages}
+                                    onClick={() => setInputCurrentPage(p => p + 1)}
+                                    className="p-1 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <ChevronRight size={20} />
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
 
@@ -348,20 +594,41 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
                         className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none"
                     />
                  </div>
-                 <div className="flex items-center gap-2">
-                    <input 
-                        type="month" 
-                        value={historyStartMonth}
-                        onChange={(e) => setHistoryStartMonth(e.target.value)}
-                        className="w-32 px-2 py-2 text-sm rounded-lg border border-gray-200"
-                    />
-                    <span className="text-gray-400">-</span>
-                    <input 
-                        type="month" 
-                        value={historyEndMonth}
-                        onChange={(e) => setHistoryEndMonth(e.target.value)}
-                        className="w-32 px-2 py-2 text-sm rounded-lg border border-gray-200"
-                    />
+                 
+                 {/* Month Pagination Controls */}
+                 <div className="flex items-center gap-3">
+                     <div className="flex items-center gap-1 border border-gray-200 rounded-lg bg-gray-50 p-1">
+                         <button 
+                            onClick={handleHistoryNext} // Go Older (p+1) - Left Arrow in UI means Go "Left" to Past
+                            disabled={!hasOlderMonths}
+                            className="p-1 hover:bg-white hover:shadow-sm rounded transition-all disabled:opacity-30"
+                            title="Older months"
+                         >
+                             <ChevronLeft size={18} />
+                         </button>
+                         <span className="text-xs font-medium px-2 text-gray-600">
+                             Months
+                         </span>
+                         <button 
+                            onClick={handleHistoryPrev} // Go Newer (p-1) - Right Arrow in UI means Go "Right" to Future
+                            disabled={!hasNewerMonths}
+                            className="p-1 hover:bg-white hover:shadow-sm rounded transition-all disabled:opacity-30"
+                            title="Newer months"
+                         >
+                             <ChevronRight size={18} />
+                         </button>
+                     </div>
+
+                     <select 
+                        value={historyMonthsToShow}
+                        onChange={(e) => handleMonthsCountChange(Number(e.target.value))}
+                        className="px-2 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none"
+                    >
+                        <option value={3}>3 Months</option>
+                        <option value={6}>6 Months</option>
+                        <option value={9}>9 Months</option>
+                        <option value={12}>12 Months</option>
+                    </select>
                  </div>
             </div>
 
@@ -373,12 +640,12 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
                             <div key={emp.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
                                 <h4 className="font-bold text-gray-900 mb-2">{emp.firstName} {emp.lastName}</h4>
                                 <div className="space-y-1">
-                                    {uniqueMonths.map(month => {
+                                    {visibleMonths.map(month => {
                                         const amount = getBonusAmount(emp.id, month);
                                         if (!amount) return null;
                                         return (
                                             <div key={month} className="flex justify-between text-sm border-b border-gray-100 last:border-0 py-1">
-                                                <span className="text-gray-500">{month}</span>
+                                                <span className="text-gray-500">{formatMonthHeader(month)}</span>
                                                 <span className="font-bold text-green-600">{amount}</span>
                                             </div>
                                         );
@@ -397,8 +664,10 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
                         <thead className="sticky top-0 bg-white shadow-sm z-10">
                             <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase text-gray-500 font-semibold tracking-wider">
                                 <th className="px-4 py-3 sticky left-0 bg-gray-50 z-20 border-r border-gray-200">Employee</th>
-                                {uniqueMonths.map(month => (
-                                    <th key={month} className="px-4 py-3 text-center min-w-[80px] border-r border-gray-100 last:border-0">{month}</th>
+                                {visibleMonths.map(month => (
+                                    <th key={month} className="px-4 py-3 text-center min-w-[100px] border-r border-gray-100 last:border-0">
+                                        {formatMonthHeader(month)}
+                                    </th>
                                 ))}
                             </tr>
                         </thead>
@@ -409,7 +678,7 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
                                         <td className="px-4 py-3 sticky left-0 bg-white border-r border-gray-200 font-medium text-sm text-gray-900">
                                             {emp.firstName} {emp.lastName}
                                         </td>
-                                        {uniqueMonths.map(month => {
+                                        {visibleMonths.map(month => {
                                             const amount = getBonusAmount(emp.id, month);
                                             return (
                                                 <td key={month} className="px-4 py-3 text-center text-sm border-r border-gray-100 last:border-0">
@@ -421,7 +690,7 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan={uniqueMonths.length + 1} className="px-6 py-12 text-center text-gray-400">
+                                    <td colSpan={visibleMonths.length + 1} className="px-6 py-12 text-center text-gray-400">
                                         No history found matching filters.
                                     </td>
                                 </tr>

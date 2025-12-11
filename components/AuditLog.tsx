@@ -74,14 +74,11 @@ export const AuditLog: React.FC<AuditLogProps> = ({ logs, lang }) => {
   // Helper for rendering date
   const renderDate = (isoStr: string) => {
       const d = new Date(isoStr);
-      // Just hardcode a format for log time? or use settings.
-      // Ideally we pass full settings object to get format.
-      // But formatDisplayDate is generic. Let's use localestring.
       return d.toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US');
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
       <div className="flex justify-between items-end">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">{t.audit_title}</h2>
@@ -98,9 +95,10 @@ export const AuditLog: React.FC<AuditLogProps> = ({ logs, lang }) => {
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col gap-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Changed from Grid to Flex Wrap to handle date overflow gracefully */}
+        <div className="flex flex-wrap gap-4">
             {/* Text Search */}
-            <div className="relative">
+            <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input 
                     type="text" 
@@ -111,25 +109,29 @@ export const AuditLog: React.FC<AuditLogProps> = ({ logs, lang }) => {
                 />
             </div>
             {/* Action Filter */}
-            <select 
-                value={actionFilter}
-                onChange={(e) => { setActionFilter(e.target.value); setCurrentPage(1); }}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-            >
-                <option value="">{t.filter_action} (All)</option>
-                {uniqueActions.map(a => <option key={a} value={a}>{a}</option>)}
-            </select>
+            <div className="min-w-[150px] flex-1 md:flex-none">
+                <select 
+                    value={actionFilter}
+                    onChange={(e) => { setActionFilter(e.target.value); setCurrentPage(1); }}
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+                >
+                    <option value="">{t.filter_action} (All)</option>
+                    {uniqueActions.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+            </div>
             {/* User Filter */}
-            <select 
-                value={userFilter}
-                onChange={(e) => { setUserFilter(e.target.value); setCurrentPage(1); }}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-            >
-                <option value="">{t.filter_user} (All)</option>
-                {uniqueUsers.map(u => <option key={u} value={u}>{u}</option>)}
-            </select>
+            <div className="min-w-[150px] flex-1 md:flex-none">
+                <select 
+                    value={userFilter}
+                    onChange={(e) => { setUserFilter(e.target.value); setCurrentPage(1); }}
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+                >
+                    <option value="">{t.filter_user} (All)</option>
+                    {uniqueUsers.map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
+            </div>
             {/* Date Range */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-[250px] flex-1 md:flex-none">
                 <input 
                     type="date" 
                     value={startDate}
@@ -137,7 +139,7 @@ export const AuditLog: React.FC<AuditLogProps> = ({ logs, lang }) => {
                     className="w-full px-2 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none"
                     placeholder={t.start_date}
                 />
-                <span className="text-gray-400">-</span>
+                <span className="text-gray-400 shrink-0">-</span>
                 <input 
                     type="date" 
                     value={endDate}
@@ -214,30 +216,33 @@ export const AuditLog: React.FC<AuditLogProps> = ({ logs, lang }) => {
             </tbody>
           </table>
         </div>
-
-        {/* Pagination Footer */}
-        {totalItems > 0 && (
-            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50">
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <span>{t.rows_per_page}:</span>
-                    <select 
-                        value={itemsPerPage} 
-                        onChange={(e) => { 
-                            setItemsPerPage(e.target.value === 'all' ? 'all' : Number(e.target.value)); 
-                            setCurrentPage(1); 
-                        }}
-                        className="bg-white border border-gray-300 rounded px-2 py-1 focus:outline-none"
-                    >
-                        <option value={50}>50</option>
-                        <option value={100}>100</option>
-                        <option value="all">{t.all}</option>
-                    </select>
-                    <span className="ml-4">
-                         {t.showing_range
+      </div>
+      
+      {/* Shared Pagination Footer */}
+      {totalItems > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-3 bg-white border border-gray-200 rounded-xl shadow-sm gap-4">
+                <div className="flex items-center gap-2 text-sm text-gray-600 w-full sm:w-auto justify-between sm:justify-start">
+                    <div className="flex items-center gap-2">
+                        <span>{t.rows_per_page}:</span>
+                        <select 
+                            value={itemsPerPage} 
+                            onChange={(e) => { 
+                                setItemsPerPage(e.target.value === 'all' ? 'all' : Number(e.target.value)); 
+                                setCurrentPage(1); 
+                            }}
+                            className="bg-gray-50 border border-gray-300 rounded px-2 py-1 focus:outline-none"
+                        >
+                            <option value={50}>50</option>
+                            <option value={100}>100</option>
+                            <option value="all">{t.all}</option>
+                        </select>
+                    </div>
+                    <span className="ml-4 text-xs sm:text-sm">
+                            {(t.showing_range as string)
                             .replace('{start}', String(startItem))
                             .replace('{end}', String(endItem))
                             .replace('{total}', String(totalItems))
-                         }
+                            }
                     </span>
                 </div>
 
@@ -246,25 +251,24 @@ export const AuditLog: React.FC<AuditLogProps> = ({ logs, lang }) => {
                         <button 
                             disabled={currentPage === 1}
                             onClick={() => setCurrentPage(p => p - 1)}
-                            className="p-1 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="p-2 rounded hover:bg-gray-100 border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            <ChevronLeft size={20} />
+                            <ChevronLeft size={16} />
                         </button>
-                        <span className="text-sm font-medium px-2">
+                        <span className="text-sm font-medium px-3">
                             {currentPage} / {totalPages}
                         </span>
                         <button 
                             disabled={currentPage === totalPages}
                             onClick={() => setCurrentPage(p => p + 1)}
-                            className="p-1 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="p-2 rounded hover:bg-gray-100 border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            <ChevronRight size={20} />
+                            <ChevronRight size={16} />
                         </button>
                     </div>
                 )}
             </div>
-        )}
-      </div>
+      )}
     </div>
   );
 };

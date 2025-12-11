@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LayoutDashboard, 
   Users, 
@@ -11,7 +11,11 @@ import {
   Home as HomeIcon,
   UserPlus,
   Award,
-  ShieldCheck
+  ShieldCheck,
+  Loader2,
+  AlertTriangle,
+  Clock,
+  GraduationCap
 } from 'lucide-react';
 import { useDataStore } from './services/storage';
 import { Home } from './components/Home';
@@ -22,51 +26,150 @@ import { Settings } from './components/Settings';
 import { UserList } from './components/UserList';
 import { Bonus } from './components/Bonus';
 import { AuditLog } from './components/AuditLog';
+import { Training } from './components/Training';
+import { Login } from './components/Login';
+import { NavItem } from './components/NavItem';
 import { Toast } from './components/ui/Toast';
 import { TabName, User } from './types';
 import { TRANSLATIONS } from './constants';
 
 function App() {
   const { 
-    employees, teams, users, settings, planning, bonuses, logs, notifications,
+    employees, teams, users, settings, planning, bonuses, logs, trainings, notifications,
+    authLoading, firebaseUser, permissionError, login, signUp, logout,
     addEmployee, updateEmployee, deleteEmployee,
     updateSettings, addTeam, updateTeam, deleteTeam,
     setPlanningItem, addUser, updateUser, deleteUser,
-    setBonus, notify
+    setBonus, addTraining, updateTraining, deleteTraining, notify
   } = useDataStore();
 
   const [activeTab, setActiveTab] = useState<TabName>('home');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // MOCK AUTH STATE for Demo Purposes
-  // In a real app, this would come from a login context
-  // For now, we select the first "admin" user found, or default to a dummy object
-  const currentUser: User = users.find(u => u.role === 'admin' && u.active) || users[0] || { 
-    id: 0, 
-    name: 'Admin', 
-    email: 'admin@system.local',
-    role: 'admin', 
-    active: true 
-  };
+  // --- DERIVED STATE (Must be unconditional for hooks) ---
+  
+  // Determine Current User from Firestore "users" collection based on Email
+  // If not found (sync delay or first user), create a safe fallback object
+  const dbUser = firebaseUser && firebaseUser.email 
+      ? users.find(u => u.email.toLowerCase() === firebaseUser.email?.toLowerCase())
+      : null;
+      
+  const currentUser: User = dbUser || (firebaseUser ? {
+      id: 0,
+      name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+      email: firebaseUser.email || '',
+      role: users.length === 0 ? 'admin' : 'viewer',
+      active: users.length === 0
+  } : { id: 0, name: '', email: '', role: 'viewer', active: false });
+
+  const isAdmin = currentUser.role === 'admin';
+
+  // Filter Data based on Role (Must be unconditional hooks)
+  const visibleTeams = useMemo(() => {
+    if (!firebaseUser) return []; // Return empty if not logged in to avoid processing
+    if (isAdmin) return teams;
+    // Find teams led by this user
+    return teams.filter(t => t.leaderId === currentUser.employeeId);
+  }, [isAdmin, teams, currentUser.employeeId, firebaseUser]);
+
+  const visibleEmployees = useMemo(() => {
+    if (!firebaseUser) return [];
+    if (isAdmin) return employees;
+    // Get IDs of teams led by user
+    const ledTeamIds = visibleTeams.map(t => t.id);
+    // Return employees in those teams
+    return employees.filter(e => e.teamId && ledTeamIds.includes(e.teamId));
+  }, [isAdmin, employees, visibleTeams, firebaseUser]);
+
+  // --- CONDITIONAL RENDERING (Early Returns) ---
+
+  // Authentication Loading Screen
+  if (authLoading) {
+     return (
+        <div className="h-screen flex items-center justify-center bg-gray-50">
+            <Loader2 className="animate-spin text-blue-600" size={48} />
+        </div>
+     );
+  }
+
+  // Permission Error Screen
+  if (permissionError) {
+      return (
+          <div className="h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
+              <div className="bg-white p-8 rounded-xl shadow-xl max-w-md w-full text-center border border-red-100">
+                  <div className="mx-auto w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4">
+                      <AlertTriangle size={32} />
+                  </div>
+                  <h2 className="text-2xl font-bold text-gray-800 mb-2">Database Access Denied</h2>
+                  <p className="text-gray-600 mb-6">
+                      Your user is authenticated, but the Firebase Firestore Security Rules are blocking access to the data.
+                  </p>
+                  <div className="bg-gray-100 p-4 rounded text-left text-xs font-mono text-gray-700 mb-6 overflow-x-auto">
+                      <p className="font-bold text-gray-500 mb-2">// Copy this to Firebase Console &gt; Firestore &gt; Rules</p>
+                      <p>rules_version = '2';</p>
+                      <p>service cloud.firestore {'{'}</p>
+                      <p className="pl-4">match /databases/{'{'}database{'}'}/documents {'{'}</p>
+                      <p className="pl-8">match /{"{"}document=**{"}"} {'{'}</p>
+                      <p className="pl-12">allow read, write: if request.auth != null;</p>
+                      <p className="pl-8">{'}'}</p>
+                      <p className="pl-4">{'}'}</p>
+                      <p>{'}'}</p>
+                  </div>
+                  <button 
+                      onClick={() => window.location.reload()}
+                      className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                  >
+                      Reload Page
+                  </button>
+                  <button 
+                      onClick={logout}
+                      className="mt-3 text-sm text-gray-500 hover:text-gray-700 underline"
+                  >
+                      Log Out
+                  </button>
+              </div>
+          </div>
+      );
+  }
+
+  // Not Authenticated -> Show Login
+  if (!firebaseUser) {
+      return (
+          <>
+            <Toast notifications={notifications} />
+            <Login onLogin={login} onSignUp={signUp} />
+          </>
+      );
+  }
+
+  // PENDING APPROVAL SCREEN
+  if (!currentUser.active) {
+      return (
+          <div className="h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
+              <div className="bg-white p-8 rounded-xl shadow-lg max-w-md w-full text-center">
+                  <div className="mx-auto w-16 h-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mb-4">
+                      <Clock size={32} />
+                  </div>
+                  <h2 className="text-2xl font-bold text-gray-800 mb-2">Account Pending Approval</h2>
+                  <p className="text-gray-600 mb-6">
+                      Your account has been created but is waiting for administrator approval. 
+                      Please contact your admin to activate your account.
+                  </p>
+                  <div className="bg-gray-50 p-3 rounded-lg text-sm text-gray-500 mb-6">
+                      User: <span className="font-medium text-gray-700">{currentUser.email}</span>
+                  </div>
+                  <button 
+                      onClick={logout}
+                      className="text-blue-600 hover:text-blue-800 font-medium hover:underline"
+                  >
+                      Back to Login
+                  </button>
+              </div>
+          </div>
+      );
+  }
 
   const t = TRANSLATIONS[settings.language];
-
-  const NavItem = ({ tab, icon: Icon, label }: { tab: TabName; icon: any; label: string }) => (
-    <button
-      onClick={() => {
-        setActiveTab(tab);
-        setIsMobileMenuOpen(false);
-      }}
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 font-medium text-sm ${
-        activeTab === tab 
-          ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' 
-          : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-      }`}
-    >
-      <Icon size={20} />
-      <span>{label}</span>
-    </button>
-  );
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
@@ -99,28 +202,40 @@ function App() {
         </div>
 
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-          <NavItem tab="home" icon={HomeIcon} label={t.home} />
-          <NavItem tab="dashboard" icon={LayoutDashboard} label={t.dashboard} />
-          <NavItem tab="employees" icon={Users} label={t.employees} />
-          <NavItem tab="planning" icon={Calendar} label={t.planning} />
-          <NavItem tab="bonus" icon={Award} label={t.bonus} />
-          <NavItem tab="users" icon={UserPlus} label={t.users} />
-           <NavItem tab="audit" icon={ShieldCheck} label={t.audit} />
+          <NavItem tab="home" icon={HomeIcon} label={t.home} activeTab={activeTab} setActiveTab={setActiveTab} setIsMobileMenuOpen={setIsMobileMenuOpen} />
+          <NavItem tab="dashboard" icon={LayoutDashboard} label={t.dashboard} activeTab={activeTab} setActiveTab={setActiveTab} setIsMobileMenuOpen={setIsMobileMenuOpen} />
+          <NavItem tab="employees" icon={Users} label={t.employees} activeTab={activeTab} setActiveTab={setActiveTab} setIsMobileMenuOpen={setIsMobileMenuOpen} />
+          <NavItem tab="planning" icon={Calendar} label={t.planning} activeTab={activeTab} setActiveTab={setActiveTab} setIsMobileMenuOpen={setIsMobileMenuOpen} />
+          <NavItem tab="training" icon={GraduationCap} label={t.training} activeTab={activeTab} setActiveTab={setActiveTab} setIsMobileMenuOpen={setIsMobileMenuOpen} />
+          <NavItem tab="bonus" icon={Award} label={t.bonus} activeTab={activeTab} setActiveTab={setActiveTab} setIsMobileMenuOpen={setIsMobileMenuOpen} />
+          
+          {/* Admin Only Tabs */}
+          {isAdmin && (
+            <>
+              <NavItem tab="users" icon={UserPlus} label={t.users} activeTab={activeTab} setActiveTab={setActiveTab} setIsMobileMenuOpen={setIsMobileMenuOpen} />
+              <NavItem tab="audit" icon={ShieldCheck} label={t.audit} activeTab={activeTab} setActiveTab={setActiveTab} setIsMobileMenuOpen={setIsMobileMenuOpen} />
+            </>
+          )}
+
           <div className="pt-4 mt-4 border-t border-slate-700/50">
-             <NavItem tab="settings" icon={SettingsIcon} label={t.settings} />
+             <NavItem tab="settings" icon={SettingsIcon} label={t.settings} activeTab={activeTab} setActiveTab={setActiveTab} setIsMobileMenuOpen={setIsMobileMenuOpen} />
           </div>
         </nav>
 
         <div className="p-4 border-t border-slate-700/50">
           <div className="flex items-center gap-3 p-2 rounded-lg bg-slate-800/50 border border-slate-700/50">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center font-bold text-sm">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center font-bold text-sm text-white">
               {currentUser.name.slice(0, 2).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{currentUser.name}</p>
               <p className="text-xs text-slate-400 truncate capitalize">{currentUser.role}</p>
             </div>
-            <button className="text-slate-400 hover:text-white transition-colors" title={t.logout}>
+            <button 
+                className="text-slate-400 hover:text-white transition-colors" 
+                title={t.logout}
+                onClick={logout}
+            >
               <LogOut size={18} />
             </button>
           </div>
@@ -149,15 +264,17 @@ function App() {
 
             {activeTab === 'dashboard' && (
               <Dashboard 
-                employees={employees} 
+                employees={visibleEmployees} 
+                teams={visibleTeams}
                 planning={planning} 
                 lang={settings.language}
+                settings={settings}
               />
             )}
             
             {activeTab === 'employees' && (
               <EmployeeList 
-                employees={employees} 
+                employees={visibleEmployees} 
                 settings={settings}
                 currentUser={currentUser}
                 onAdd={addEmployee}
@@ -169,8 +286,8 @@ function App() {
 
             {activeTab === 'planning' && (
               <Planning 
-                employees={employees} 
-                teams={teams}
+                employees={visibleEmployees} 
+                teams={visibleTeams}
                 settings={settings} 
                 planning={planning}
                 currentUser={currentUser}
@@ -178,10 +295,24 @@ function App() {
               />
             )}
 
+            {activeTab === 'training' && (
+              <Training 
+                trainings={trainings}
+                teams={teams}
+                employees={employees}
+                currentUser={currentUser}
+                settings={settings}
+                onAdd={addTraining}
+                onUpdate={updateTraining}
+                onDelete={deleteTraining}
+                notify={notify}
+              />
+            )}
+
             {activeTab === 'bonus' && (
               <Bonus 
-                employees={employees}
-                teams={teams}
+                employees={visibleEmployees}
+                teams={visibleTeams}
                 bonuses={bonuses}
                 settings={settings}
                 onUpdateBonus={setBonus}
@@ -189,7 +320,7 @@ function App() {
               />
             )}
 
-            {activeTab === 'users' && (
+            {activeTab === 'users' && isAdmin && (
               <UserList 
                 users={users}
                 employees={employees}
@@ -201,7 +332,7 @@ function App() {
               />
             )}
 
-             {activeTab === 'audit' && (
+             {activeTab === 'audit' && isAdmin && (
               <AuditLog 
                 logs={logs}
                 lang={settings.language}
@@ -210,9 +341,10 @@ function App() {
 
             {activeTab === 'settings' && (
               <Settings 
+                currentUser={currentUser}
                 settings={settings}
-                teams={teams}
-                employees={employees}
+                teams={teams} // Admin needs all teams to check overlaps/management
+                employees={employees} // Admin needs all employees for assignment
                 onUpdateSettings={updateSettings}
                 onAddTeam={addTeam}
                 onUpdateTeam={updateTeam}

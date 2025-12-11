@@ -55,6 +55,24 @@ export interface User {
   employeeId?: number; // Link to an employee profile (for Team Leaders)
 }
 
+export interface TrainingParticipant {
+  employeeId: number;
+  present: boolean;
+}
+
+export interface Training {
+  id: number;
+  title: string;
+  description: string;
+  startDate: string;
+  endDate: string;
+  sessionCount: number;
+  sessionDates: string[];
+  targetTeamIds: number[];
+  status: 'planned' | 'in_progress' | 'validated' | 'archived';
+  participants: TrainingParticipant[];
+}
+
 export interface AuditLogEntry {
   id: number;
   timestamp: string;
@@ -83,10 +101,10 @@ export interface Notification {
   type: 'success' | 'error' | 'info';
 }
 
-export type TabName = 'home' | 'dashboard' | 'employees' | 'planning' | 'settings' | 'users' | 'bonus' | 'audit';
+export type TabName = 'home' | 'dashboard' | 'employees' | 'planning' | 'settings' | 'users' | 'bonus' | 'audit' | 'training';
 
 export type TranslationKey = 
-  | 'home' | 'dashboard' | 'employees' | 'planning' | 'settings' | 'users' | 'bonus' | 'audit'
+  | 'home' | 'dashboard' | 'employees' | 'planning' | 'settings' | 'users' | 'bonus' | 'audit' | 'training'
   | 'logout' | 'search' | 'new_employee' | 'filter_category' | 'filter_employee' | 'filter_team'
   | 'stats_total' | 'stats_present' | 'stats_absent'
   | 'welcome_title' | 'welcome_subtitle'
@@ -101,4 +119,8 @@ export type TranslationKey =
   | 'rows_per_page' | 'all' | 'showing_range' | 'filter_action' | 'filter_user' | 'filter_date' | 'start_date' | 'end_date'
   | 'view_calendar' | 'view_grid' | 'export_pdf' | 'export_image' | 'color'
   | 'error_entry_before_birth' | 'error_exit_before_birth' | 'error_exit_before_entry'
-  | 'export' | 'assign_to';
+  | 'export' | 'assign_to'
+  | 'status_planned' | 'status_in_progress' | 'status_validated' | 'status_archived'
+  | 'training_title' | 'training_sessions' | 'training_target' | 'training_participants' | 'training_attendance'
+  | 'manage_participants' | 'mark_attendance' | 'validate_step' | 'archive' | 'back_step'
+  | 'training_dashboard' | 'beneficiaries' | 'training_history' | 'attendees';

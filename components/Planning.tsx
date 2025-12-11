@@ -88,6 +88,12 @@ export const Planning: React.FC<PlanningProps> = ({ employees, teams, settings, 
     }
   };
 
+  const changeDate = (days: number) => {
+    const d = new Date(startDate);
+    d.setDate(d.getDate() + days);
+    setStartDate(d.toISOString().split('T')[0]);
+  };
+
   const getShiftDetails = (name: string) => settings.shifts.find(s => s.name === name);
   const getAbsenceDetails = (name: string) => settings.absenceTypes.find(a => a.name === name);
 
@@ -341,12 +347,24 @@ export const Planning: React.FC<PlanningProps> = ({ employees, teams, settings, 
 
           <div className="h-6 w-px bg-gray-200 mx-1"></div>
 
-          <input 
-            type="date" 
-            value={startDate} 
-            onChange={(e) => setStartDate(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none"
-          />
+          {/* Date Navigation & Range */}
+          <div className="flex items-center gap-1">
+             <button onClick={() => changeDate(-daysToShow)} className="p-1.5 hover:bg-gray-100 rounded text-gray-600">
+                <ChevronLeft size={20} />
+             </button>
+             
+             <input 
+                type="date" 
+                value={startDate} 
+                onChange={(e) => setStartDate(e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none"
+             />
+             
+             <button onClick={() => changeDate(daysToShow)} className="p-1.5 hover:bg-gray-100 rounded text-gray-600">
+                <ChevronRight size={20} />
+             </button>
+          </div>
+
           <select 
             value={daysToShow} 
             onChange={(e) => setDaysToShow(Number(e.target.value))}
@@ -551,19 +569,25 @@ export const Planning: React.FC<PlanningProps> = ({ employees, teams, settings, 
              <div className="space-y-3">
                  {/* Mobile Grid Date Control */}
                  <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-gray-200">
+                     <button onClick={() => changeDate(-daysToShow)} className="p-1.5 hover:bg-gray-100 rounded text-gray-500">
+                        <ChevronLeft size={18} />
+                     </button>
                     <input 
                         type="date" 
                         value={startDate} 
                         onChange={(e) => setStartDate(e.target.value)}
                         className="border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none flex-1"
                     />
+                    <button onClick={() => changeDate(daysToShow)} className="p-1.5 hover:bg-gray-100 rounded text-gray-500">
+                        <ChevronRight size={18} />
+                     </button>
                     <select 
                         value={daysToShow} 
                         onChange={(e) => setDaysToShow(Number(e.target.value))}
                         className="border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none bg-white"
                     >
-                        <option value={7}>7 Days</option>
-                        <option value={3}>3 Days</option>
+                        <option value={7}>7 {settings.language === 'fr' ? 'Jours' : 'Days'}</option>
+                        <option value={14}>14 {settings.language === 'fr' ? 'Jours' : 'Days'}</option>
                     </select>
                  </div>
 
@@ -571,7 +595,7 @@ export const Planning: React.FC<PlanningProps> = ({ employees, teams, settings, 
                      <table className="w-full border-collapse">
                          <thead>
                             <tr>
-                                <th className="p-3 text-left text-xs font-bold text-gray-500 uppercase bg-gray-50 sticky left-0 z-10 border-b border-r border-gray-200">
+                                <th className="p-3 text-left text-xs font-bold text-gray-500 uppercase bg-gray-50 sticky left-0 z-10 border-b border-r border-gray-200 min-w-[80px]">
                                     {settings.language === 'fr' ? 'Emp.' : 'Emp.'}
                                 </th>
                                 {dates.map(date => (
@@ -585,8 +609,10 @@ export const Planning: React.FC<PlanningProps> = ({ employees, teams, settings, 
                          <tbody>
                             {filteredEmployees.map(emp => (
                                 <tr key={emp.id}>
-                                    <td className="p-2 sticky left-0 bg-white border-r border-gray-200 text-xs font-medium text-gray-900 shadow-[4px_0_12px_-4px_rgba(0,0,0,0.1)]">
-                                        {emp.firstName}
+                                    <td className="p-1 sticky left-0 bg-white border-r border-gray-200 z-10 shadow-[4px_0_12px_-4px_rgba(0,0,0,0.1)] min-w-[80px] max-w-[100px]">
+                                        <div className="text-[10px] leading-tight font-medium text-gray-900 break-words whitespace-normal px-1">
+                                            {emp.firstName} {emp.lastName}
+                                        </div>
                                     </td>
                                     {dates.map(date => (
                                         <td 
