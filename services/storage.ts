@@ -3,16 +3,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Employee, User, Team, AppSettings, PlanningData, Bonus, AuditLogEntry, Notification, Training } from '../types';
 import { DEFAULT_USERS, DEFAULT_SETTINGS } from '../constants';
 import { db, auth } from './firebase';
-import * as firestore from 'firebase/firestore';
 import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword,
-  signOut, 
-  onAuthStateChanged,
-  User as FirebaseUser
-} from 'firebase/auth';
-
-const { 
   collection, 
   doc, 
   setDoc, 
@@ -24,7 +15,14 @@ const {
   getDocs,
   limit,
   where
-} = firestore as any;
+} from 'firebase/firestore';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword,
+  signOut, 
+  onAuthStateChanged,
+  User as FirebaseUser
+} from 'firebase/auth';
 
 // Helper to calculate diffs for logging
 const getDiff = (oldObj: any, newObj: any) => {
@@ -70,7 +68,7 @@ export const useDataStore = () => {
     setNotifications(prev => [...prev, { id, message, type }]);
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== id));
-    }, 5000);
+    }, 1500); // Reduced to 1.5s for faster dismissal
   };
 
   const handleFirestoreError = (error: any) => {
@@ -194,7 +192,10 @@ export const useDataStore = () => {
           let msg = "Login failed";
           const errorCode = error.code;
           
-          if (errorCode === 'auth/invalid-credential' || errorCode === 'auth/user-not-found' || errorCode === 'auth/wrong-password') {
+          if (errorCode === 'auth/invalid-credential' || 
+              errorCode === 'auth/user-not-found' || 
+              errorCode === 'auth/wrong-password' || 
+              errorCode === 'auth/invalid-login-credentials') {
               msg = "Invalid email or password.";
           } else if (errorCode === 'auth/too-many-requests') {
               msg = "Too many failed attempts. Try again later.";
@@ -238,13 +239,15 @@ export const useDataStore = () => {
           return true;
       } catch (error: any) {
           let msg = "Sign up failed";
-          if (error.code === 'auth/email-already-in-use') {
+          const errorCode = error.code;
+
+          if (errorCode === 'auth/email-already-in-use') {
               msg = "Email already in use. Please Log In instead.";
-          } else if (error.code === 'auth/weak-password') {
+          } else if (errorCode === 'auth/weak-password') {
               msg = "Password should be at least 6 characters.";
-          } else if (error.code === 'auth/invalid-email') {
+          } else if (errorCode === 'auth/invalid-email') {
               msg = "Invalid email address.";
-          } else if (error.code === 'permission-denied') {
+          } else if (errorCode === 'permission-denied') {
               msg = "Account created but profile sync failed. Check Firestore Rules.";
               console.error("Signup Permission Error:", error);
           } else {
@@ -656,7 +659,18 @@ export const useDataStore = () => {
       const old = trainings.find(t => t.id === id);
       if(!old) return;
       try {
-          await updateDoc(doc(db, "trainings", String(id)), data);
+          // Robust update: Query by field 'id' first
+          const q = query(collection(db, "trainings"), where("id", "==", id));
+          const snapshot = await getDocs(q);
+          
+          if (!snapshot.empty) {
+              const docRef = snapshot.docs[0].ref;
+              await updateDoc(docRef, data);
+          } else {
+              // Fallback
+              await updateDoc(doc(db, "trainings", String(id)), data);
+          }
+
           if (data.status && data.status !== old.status) {
               addLog('UPDATE_TRAINING_STATUS', `Training ${old.title} moved to ${data.status}`);
           }
@@ -669,7 +683,21 @@ export const useDataStore = () => {
   const deleteTraining = async (id: number) => {
       const t = trainings.find(t => t.id === id);
       try {
-          await deleteDoc(doc(db, "trainings", String(id)));
+          // Robust deletion: Query by field 'id' to find the document reference
+          // This handles cases where the doc ID is not exactly "String(id)" (e.g. manual import or migration)
+          const q = query(collection(db, "trainings"), where("id", "==", id));
+          const snapshot = await getDocs(q);
+          
+          if (snapshot.empty) {
+              // Fallback: Try direct ID just in case
+              await deleteDoc(doc(db, "trainings", String(id)));
+          } else {
+              // Delete all matching docs (should be one)
+              snapshot.forEach(async (d) => {
+                  await deleteDoc(d.ref);
+              });
+          }
+
           addLog('DELETE_TRAINING', `Deleted training ${t?.title}`);
           notify('Training deleted');
       } catch (e) {

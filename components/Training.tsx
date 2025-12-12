@@ -185,6 +185,15 @@ export const Training: React.FC<TrainingProps> = ({ trainings, teams, employees,
         }
     };
 
+    // Robust Delete Handler
+    const handleDeleteClick = (e: React.MouseEvent, id: number) => {
+        e.stopPropagation();
+        e.preventDefault();
+        if (window.confirm(`${t.delete}?`)) {
+            onDelete(id);
+        }
+    };
+
     // --- Tab Navigation Handlers ---
     const handleNextTab = () => {
         const idx = STATUS_ORDER.indexOf(activeStatus);
@@ -532,7 +541,7 @@ export const Training: React.FC<TrainingProps> = ({ trainings, teams, employees,
                                     <>
                                         <Button size="sm" onClick={(e) => advanceStatus(e, tr)} icon={ArrowRight} className="bg-green-600 hover:bg-green-700">{t.validate_step}</Button>
                                         <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); handleOpenEditModal(tr); }} icon={Edit2}>{t.edit}</Button>
-                                        <Button size="sm" variant="danger" onClick={(e) => { e.stopPropagation(); if(window.confirm(t.delete+'?')) onDelete(tr.id); }} icon={Trash2}>{t.delete}</Button>
+                                        <Button size="sm" variant="danger" onClick={(e) => handleDeleteClick(e, tr.id)} icon={Trash2}>{t.delete}</Button>
                                     </>
                                 )}
                                 {activeStatus === 'in_progress' && (
