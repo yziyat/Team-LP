@@ -53,7 +53,7 @@ export interface User {
   role: 'admin' | 'editor' | 'viewer' | 'manager';
   active: boolean;
   emailVerified?: boolean; // New field to track email verification status in Firestore
-  employeeId?: number; // Link to an employee profile (for Team Leaders)
+  employeeId?: number | null; // Link to an employee profile (for Team Leaders). Nullable to allow clearing.
 }
 
 export interface TrainingParticipant {

@@ -63,7 +63,8 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
       name: formData.name,
       email: formData.email,
       role: formData.role,
-      employeeId: formData.employeeId ? Number(formData.employeeId) : undefined,
+      // Fix: Send null instead of undefined/empty string for Firestore compatibility
+      employeeId: formData.employeeId && formData.employeeId !== '' ? Number(formData.employeeId) : null,
       active: formData.active
     };
 
@@ -283,10 +284,10 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
             <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
             <select required className="w-full px-3 py-2 border rounded-lg bg-white"
               value={formData.role} onChange={e => setFormData({...formData, role: e.target.value as any})}>
-              <option value="viewer">Viewer (Read Only)</option>
-              <option value="editor">Editor (Can Manage)</option>
-              <option value="manager">Manager (Team Leader)</option>
-              <option value="admin">Admin (Full Access)</option>
+              <option value="viewer">Viewer</option>
+              <option value="editor">Editor</option>
+              <option value="manager">Manager</option>
+              <option value="admin">Admin</option>
             </select>
           </div>
           <div>
