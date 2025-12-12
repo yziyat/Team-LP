@@ -16,6 +16,7 @@ export const Button: React.FC<ButtonProps> = ({
   icon: Icon, 
   className = '', 
   fullWidth = false,
+  type = 'button', // Standard: Default to 'button' to prevent accidental form submission
   ...props 
 }) => {
   const baseStyles = "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:pointer-events-none shadow-sm";
@@ -38,10 +39,11 @@ export const Button: React.FC<ButtonProps> = ({
 
   return (
     <button 
+      type={type}
       className={`${baseStyles} ${sizeStyles[size]} ${variants[variant]} ${fullWidth ? 'w-full' : ''} ${className}`}
       {...props}
     >
-      {Icon && <Icon size={iconSize} />}
+      {Icon && <Icon size={iconSize} aria-hidden="true" />}
       {children}
     </button>
   );

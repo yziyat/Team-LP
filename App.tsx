@@ -46,6 +46,14 @@ function App() {
   const [activeTab, setActiveTab] = useState<TabName>('home');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  // --- STANDARD: Dynamic Language & Title Handling ---
+  useEffect(() => {
+    // Update HTML lang attribute for Screen Readers
+    document.documentElement.lang = settings.language;
+    // Update Page Title
+    document.title = settings.language === 'fr' ? 'Team LP - Gestion' : 'Team LP - Management';
+  }, [settings.language]);
+
   // --- DERIVED STATE (Must be unconditional for hooks) ---
   
   // Determine Current User from Firestore "users" collection based on Email
@@ -196,12 +204,13 @@ function App() {
           <button 
             className="ml-auto lg:hidden text-slate-400"
             onClick={() => setIsMobileMenuOpen(false)}
+            aria-label="Close menu"
           >
             <X size={24} />
           </button>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto" role="navigation" aria-label="Main Navigation">
           <NavItem tab="home" icon={HomeIcon} label={t.home} activeTab={activeTab} setActiveTab={setActiveTab} setIsMobileMenuOpen={setIsMobileMenuOpen} />
           <NavItem tab="dashboard" icon={LayoutDashboard} label={t.dashboard} activeTab={activeTab} setActiveTab={setActiveTab} setIsMobileMenuOpen={setIsMobileMenuOpen} />
           <NavItem tab="employees" icon={Users} label={t.employees} activeTab={activeTab} setActiveTab={setActiveTab} setIsMobileMenuOpen={setIsMobileMenuOpen} />
@@ -224,7 +233,7 @@ function App() {
 
         <div className="p-4 border-t border-slate-700/50">
           <div className="flex items-center gap-3 p-2 rounded-lg bg-slate-800/50 border border-slate-700/50">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center font-bold text-sm text-white">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center font-bold text-sm text-white" aria-hidden="true">
               {currentUser.name.slice(0, 2).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
@@ -234,6 +243,7 @@ function App() {
             <button 
                 className="text-slate-400 hover:text-white transition-colors" 
                 title={t.logout}
+                aria-label={t.logout}
                 onClick={logout}
             >
               <LogOut size={18} />
@@ -249,6 +259,7 @@ function App() {
           <button 
             onClick={() => setIsMobileMenuOpen(true)}
             className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+            aria-label="Open menu"
           >
             <Menu size={24} />
           </button>
@@ -256,7 +267,7 @@ function App() {
         </header>
 
         {/* Main Scroll Area */}
-        <main className="flex-1 overflow-auto p-4 md:p-8">
+        <main className="flex-1 overflow-auto p-4 md:p-8" role="main">
           <div className="max-w-7xl mx-auto">
             {activeTab === 'home' && (
               <Home setTab={setActiveTab} lang={settings.language} />

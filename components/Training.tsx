@@ -270,7 +270,13 @@ export const Training: React.FC<TrainingProps> = ({ trainings, teams, employees,
     };
     
     // --- Archived Details ---
-    const handleTrainingClick = (tr: TrainingType) => {
+    const handleTrainingClick = (e: React.MouseEvent, tr: TrainingType) => {
+        // Prevent opening modal if clicking on a button or interactive element
+        const target = e.target as HTMLElement;
+        if (target.closest('button') || target.closest('a')) {
+            return;
+        }
+
         if (tr.status === 'archived') {
             setDetailTraining(tr);
             setIsDetailModalOpen(true);
@@ -505,7 +511,7 @@ export const Training: React.FC<TrainingProps> = ({ trainings, teams, employees,
                 )}
                 
                 {paginatedTrainings.map(tr => (
-                    <div key={tr.id} onClick={() => handleTrainingClick(tr)} className={`bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow ${tr.status === 'archived' ? 'cursor-pointer hover:border-blue-300' : ''}`}>
+                    <div key={tr.id} onClick={(e) => handleTrainingClick(e, tr)} className={`bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow ${tr.status === 'archived' ? 'cursor-pointer hover:border-blue-300' : ''}`}>
                         <div className="flex flex-col md:flex-row justify-between gap-4">
                             <div className="flex-1 space-y-2 min-w-0">
                                 <div className="flex items-center gap-2 mb-1 flex-wrap">

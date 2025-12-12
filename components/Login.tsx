@@ -58,12 +58,14 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onSignUp }) => {
         <div className="p-8">
             <form onSubmit={handleSubmit} className="space-y-5">
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Email Address</label>
+                    <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">Email Address</label>
                     <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} aria-hidden="true" />
                         <input 
+                            id="email"
                             required
                             type="email" 
+                            autoComplete="username"
                             className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
                             placeholder="name@company.com"
                             value={email}
@@ -72,12 +74,14 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onSignUp }) => {
                     </div>
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
+                    <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
                     <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} aria-hidden="true" />
                         <input 
+                            id="password"
                             required
-                            type="password" 
+                            type="password"
+                            autoComplete={isSignUp ? "new-password" : "current-password"}
                             className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
                             placeholder="••••••••"
                             value={password}
@@ -112,6 +116,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onSignUp }) => {
             </form>
             <div className="text-center mt-6">
                 <button 
+                    type="button"
                     onClick={() => { setIsSignUp(!isSignUp); setEmail(''); setPassword(''); }}
                     className="text-sm text-blue-600 hover:text-blue-800 font-medium"
                 >
