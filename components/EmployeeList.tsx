@@ -36,6 +36,9 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [selectedExitEmployee, setSelectedExitEmployee] = useState<Employee | null>(null);
   const [exitDate, setExitDate] = useState('');
+  
+  // Deletion Confirmation State
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean, empId: number | null }>({ isOpen: false, empId: null });
 
   // Form State
   const [formData, setFormData] = useState({
@@ -108,6 +111,17 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
     setSelectedExitEmployee(emp);
     setExitDate(emp.exitDate || '');
     setIsExitModalOpen(true);
+  };
+  
+  const confirmDelete = (id: number) => {
+      setDeleteConfirmation({ isOpen: true, empId: id });
+  };
+
+  const executeDelete = () => {
+      if (deleteConfirmation.empId !== null) {
+          onDelete(deleteConfirmation.empId);
+          setDeleteConfirmation({ isOpen: false, empId: null });
+      }
   };
 
   const validateDates = (birthDate: string, entryDate: string, exitDate: string | null) => {
@@ -296,7 +310,7 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
         <button onClick={() => handleOpenModal(emp)} className="p-1.5 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors">
           <Edit2 size={16} />
         </button>
-        <button onClick={() => { if(window.confirm(t.delete + '?')) onDelete(emp.id) }} className="p-1.5 hover:bg-red-50 text-red-600 rounded-lg transition-colors">
+        <button onClick={() => confirmDelete(emp.id)} className="p-1.5 hover:bg-red-50 text-red-600 rounded-lg transition-colors">
           <Trash2 size={16} />
         </button>
       </div>
@@ -546,6 +560,30 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
             </div>
         )}
       </div>
+      
+      {/* Deletion Confirmation Modal */}
+      <Modal
+        isOpen={deleteConfirmation.isOpen}
+        onClose={() => setDeleteConfirmation({ isOpen: false, empId: null })}
+        title={t.delete + '?'}
+        size="sm"
+      >
+          <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                  {settings.language === 'fr' 
+                    ? 'Êtes-vous sûr de vouloir supprimer cet employé ? Cette action est irréversible.' 
+                    : 'Are you sure you want to delete this employee? This action cannot be undone.'}
+              </p>
+              <div className="flex justify-end gap-3">
+                  <Button variant="ghost" onClick={() => setDeleteConfirmation({ isOpen: false, empId: null })}>
+                      {t.cancel}
+                  </Button>
+                  <Button variant="danger" onClick={executeDelete}>
+                      {t.delete}
+                  </Button>
+              </div>
+          </div>
+      </Modal>
 
       {/* Edit/Create Modal (Restricted) */}
       <Modal 

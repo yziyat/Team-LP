@@ -1,12 +1,13 @@
 
 import React from 'react';
-import { Calendar, Users, Settings, Activity, LayoutDashboard, UserPlus, ShieldCheck, Award, GraduationCap } from 'lucide-react';
-import { TabName, AppSettings } from '../types';
+import { Calendar, Users, Settings, LayoutDashboard, UserPlus, ShieldCheck, Award, GraduationCap } from 'lucide-react';
+import { TabName, AppSettings, User } from '../types';
 import { TRANSLATIONS } from '../constants';
 
 interface HomeProps {
   setTab: (tab: TabName) => void;
   lang: AppSettings['language'];
+  currentUser: User;
 }
 
 const QuickCard = ({ title, icon: Icon, onClick, color }: { title: string, icon: any, onClick: () => void, color: string }) => (
@@ -21,8 +22,9 @@ const QuickCard = ({ title, icon: Icon, onClick, color }: { title: string, icon:
   </button>
 );
 
-export const Home: React.FC<HomeProps> = ({ setTab, lang }) => {
+export const Home: React.FC<HomeProps> = ({ setTab, lang, currentUser }) => {
   const t = TRANSLATIONS[lang];
+  const isAdmin = currentUser.role === 'admin';
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -68,18 +70,24 @@ export const Home: React.FC<HomeProps> = ({ setTab, lang }) => {
           onClick={() => setTab('settings')}
           color="bg-orange-500"
         />
-         <QuickCard 
-          title={t.users}
-          icon={UserPlus}
-          onClick={() => setTab('users')}
-          color="bg-emerald-500"
-        />
-         <QuickCard 
-          title={t.audit}
-          icon={ShieldCheck}
-          onClick={() => setTab('audit')}
-          color="bg-slate-600"
-        />
+        
+        {/* Admin Only Cards */}
+        {isAdmin && (
+          <>
+            <QuickCard 
+              title={t.users}
+              icon={UserPlus}
+              onClick={() => setTab('users')}
+              color="bg-emerald-500"
+            />
+            <QuickCard 
+              title={t.audit}
+              icon={ShieldCheck}
+              onClick={() => setTab('audit')}
+              color="bg-slate-600"
+            />
+          </>
+        )}
       </div>
     </div>
   );

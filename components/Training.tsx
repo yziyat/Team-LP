@@ -55,6 +55,9 @@ export const Training: React.FC<TrainingProps> = ({ trainings, teams, employees,
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [detailTraining, setDetailTraining] = useState<TrainingType | null>(null);
 
+    // Deletion Confirmation State
+    const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean, trId: number | null }>({ isOpen: false, trId: null });
+
     // --- DASHBOARD STATE (Admin Only) ---
     const [isDashboardOpen, setIsDashboardOpen] = useState(false);
     const [dashStartDate, setDashStartDate] = useState(() => `${new Date().getFullYear()}-01-01`);
@@ -185,12 +188,18 @@ export const Training: React.FC<TrainingProps> = ({ trainings, teams, employees,
         }
     };
 
-    // Robust Delete Handler
+    // Robust Delete Handler - Opens MODAL
     const handleDeleteClick = (e: React.MouseEvent, id: number) => {
         e.stopPropagation();
         e.preventDefault();
-        if (window.confirm(`${t.delete}?`)) {
-            onDelete(id);
+        setDeleteConfirmation({ isOpen: true, trId: id });
+    };
+    
+    // Actually executes delete
+    const executeDelete = () => {
+        if (deleteConfirmation.trId !== null) {
+            onDelete(deleteConfirmation.trId);
+            setDeleteConfirmation({ isOpen: false, trId: null });
         }
     };
 
@@ -873,6 +882,30 @@ export const Training: React.FC<TrainingProps> = ({ trainings, teams, employees,
                         </div>
                     </div>
                 )}
+            </Modal>
+
+            {/* Deletion Confirmation Modal - THIS IS THE CRITICAL PART */}
+            <Modal
+                isOpen={deleteConfirmation.isOpen}
+                onClose={() => setDeleteConfirmation({ isOpen: false, trId: null })}
+                title={t.delete + '?'}
+                size="sm"
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-gray-600">
+                        {settings.language === 'fr' 
+                            ? 'Êtes-vous sûr de vouloir supprimer cette formation ?' 
+                            : 'Are you sure you want to delete this training?'}
+                    </p>
+                    <div className="flex justify-end gap-3">
+                        <Button variant="ghost" onClick={() => setDeleteConfirmation({ isOpen: false, trId: null })}>
+                            {t.cancel}
+                        </Button>
+                        <Button variant="danger" onClick={executeDelete}>
+                            {t.delete}
+                        </Button>
+                    </div>
+                </div>
             </Modal>
         </div>
     );

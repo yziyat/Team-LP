@@ -15,9 +15,12 @@ import {
   Loader2,
   AlertTriangle,
   Clock,
-  GraduationCap
+  GraduationCap,
+  Mail,
+  RefreshCw
 } from 'lucide-react';
 import { useDataStore } from './services/storage';
+import { auth } from './services/firebase'; // Import auth for manual reload
 import { Home } from './components/Home';
 import { Dashboard } from './components/Dashboard';
 import { EmployeeList } from './components/EmployeeList';
@@ -36,7 +39,7 @@ import { TRANSLATIONS } from './constants';
 function App() {
   const { 
     employees, teams, users, settings, planning, bonuses, logs, trainings, notifications,
-    authLoading, firebaseUser, permissionError, login, signUp, logout,
+    authLoading, firebaseUser, permissionError, login, signUp, logout, resendVerification,
     addEmployee, updateEmployee, deleteEmployee,
     updateSettings, addTeam, updateTeam, deleteTeam,
     setPlanningItem, addUser, updateUser, deleteUser,
@@ -45,6 +48,7 @@ function App() {
 
   const [activeTab, setActiveTab] = useState<TabName>('home');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isCheckingVerification, setIsCheckingVerification] = useState(false);
 
   // --- STANDARD: Dynamic Language & Title Handling ---
   useEffect(() => {
@@ -67,7 +71,8 @@ function App() {
       name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
       email: firebaseUser.email || '',
       role: users.length === 0 ? 'admin' : 'viewer',
-      active: users.length === 0
+      active: users.length === 0,
+      emailVerified: firebaseUser.emailVerified
   } : { id: 0, name: '', email: '', role: 'viewer', active: false });
 
   const isAdmin = currentUser.role === 'admin';
@@ -89,7 +94,29 @@ function App() {
     return employees.filter(e => e.teamId && ledTeamIds.includes(e.teamId));
   }, [isAdmin, employees, visibleTeams, firebaseUser]);
 
+  // --- ACTIONS ---
+  
+  const handleCheckVerification = async () => {
+    if (!auth.currentUser) return;
+    setIsCheckingVerification(true);
+    try {
+        await auth.currentUser.reload();
+        if (auth.currentUser.emailVerified) {
+            // Force reload to sync everything cleanly
+            window.location.reload();
+        } else {
+            notify(settings.language === 'fr' ? "Email non vérifié. Veuillez cliquer sur le lien reçu." : "Email not verified yet. Please click the link.", "error");
+        }
+    } catch (e) {
+        notify("Error checking status.", "error");
+    } finally {
+        setIsCheckingVerification(false);
+    }
+  };
+
   // --- CONDITIONAL RENDERING (Early Returns) ---
+  
+  const t = TRANSLATIONS[settings.language];
 
   // Authentication Loading Screen
   if (authLoading) {
@@ -145,12 +172,56 @@ function App() {
       return (
           <>
             <Toast notifications={notifications} />
-            <Login onLogin={login} onSignUp={signUp} />
+            <Login onLogin={login} onSignUp={signUp} notify={notify} />
           </>
       );
   }
 
-  // PENDING APPROVAL SCREEN
+  // CHECK 1: EMAIL VERIFICATION
+  if (firebaseUser && !firebaseUser.emailVerified) {
+      return (
+        <>
+        <Toast notifications={notifications} />
+        <div className="h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
+            <div className="bg-white p-8 rounded-xl shadow-lg max-w-md w-full text-center">
+                <div className="mx-auto w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4">
+                    <Mail size={32} />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-800 mb-2">{t.verify_email_title}</h2>
+                <p className="text-gray-600 mb-6">
+                    {t.verify_email_desc} <strong>{firebaseUser.email}</strong>.
+                    <br/>
+                    Please click the link in the email to continue.
+                </p>
+                <div className="space-y-3">
+                    <button 
+                        onClick={handleCheckVerification}
+                        disabled={isCheckingVerification}
+                        className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                    >
+                        {isCheckingVerification && <Loader2 size={16} className="animate-spin" />}
+                        {settings.language === 'fr' ? "J'ai vérifié mon email" : "I have verified my email"}
+                    </button>
+                    <button 
+                        onClick={resendVerification}
+                        className="w-full bg-white border border-gray-300 text-gray-700 py-2 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
+                    >
+                        {t.resend_email}
+                    </button>
+                    <button 
+                        onClick={logout}
+                        className="w-full text-gray-500 hover:text-gray-700 text-sm py-2 hover:underline"
+                    >
+                        {settings.language === 'fr' ? 'Se déconnecter' : 'Log out'}
+                    </button>
+                </div>
+            </div>
+        </div>
+        </>
+      );
+  }
+
+  // CHECK 2: ADMIN APPROVAL (Active Status)
   if (!currentUser.active) {
       return (
           <div className="h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
@@ -160,7 +231,7 @@ function App() {
                   </div>
                   <h2 className="text-2xl font-bold text-gray-800 mb-2">Account Pending Approval</h2>
                   <p className="text-gray-600 mb-6">
-                      Your account has been created but is waiting for administrator approval. 
+                      Your email is verified! Your account is now waiting for administrator approval. 
                       Please contact your admin to activate your account.
                   </p>
                   <div className="bg-gray-50 p-3 rounded-lg text-sm text-gray-500 mb-6">
@@ -177,7 +248,6 @@ function App() {
       );
   }
 
-  const t = TRANSLATIONS[settings.language];
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
@@ -238,7 +308,6 @@ function App() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{currentUser.name}</p>
-              <p className="text-xs text-slate-400 truncate capitalize">{currentUser.role}</p>
             </div>
             <button 
                 className="text-slate-400 hover:text-white transition-colors" 
@@ -270,7 +339,7 @@ function App() {
         <main className="flex-1 overflow-auto p-4 md:p-8" role="main">
           <div className="max-w-7xl mx-auto">
             {activeTab === 'home' && (
-              <Home setTab={setActiveTab} lang={settings.language} />
+              <Home setTab={setActiveTab} lang={settings.language} currentUser={currentUser} />
             )}
 
             {activeTab === 'dashboard' && (

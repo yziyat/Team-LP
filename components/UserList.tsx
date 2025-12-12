@@ -22,6 +22,9 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [filter, setFilter] = useState<'all' | 'pending'>('all');
   
+  // Deletion Confirmation State
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean, userId: number | null }>({ isOpen: false, userId: null });
+  
   // Form State
   const [formData, setFormData] = useState({ 
     name: '', 
@@ -58,7 +61,8 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
     if (editingUser) {
       onUpdateUser(editingUser.id, payload);
     } else {
-      onAddUser({ ...payload, active: true });
+      // Admin created users are trusted
+      onAddUser({ ...payload, active: true, emailVerified: true });
     }
     setIsModalOpen(false);
   };
@@ -70,8 +74,13 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
   };
 
   const handleDelete = (id: number) => {
-      if (window.confirm(t.delete + '?')) {
-          onDeleteUser(id);
+      setDeleteConfirmation({ isOpen: true, userId: id });
+  };
+  
+  const executeDelete = () => {
+      if (deleteConfirmation.userId !== null) {
+          onDeleteUser(deleteConfirmation.userId);
+          setDeleteConfirmation({ isOpen: false, userId: null });
       }
   };
 
@@ -96,8 +105,11 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
       </div>
   );
 
-  const pendingCount = users.filter(u => !u.active).length;
-  const filteredUsers = filter === 'all' ? users : users.filter(u => !u.active);
+  // Filters: Pending includes ONLY those who have verified their email but are not yet active
+  const pendingCount = users.filter(u => !u.active && u.emailVerified).length;
+  const filteredUsers = filter === 'all' 
+    ? users 
+    : users.filter(u => !u.active && u.emailVerified);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -142,9 +154,10 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
                          <div>
                              <h4 className="font-semibold text-gray-900">{user.name}</h4>
                              <p className="text-xs text-gray-500">{user.email}</p>
+                             {!user.emailVerified && <span className="text-[10px] text-red-500 italic">Email not verified</span>}
                          </div>
                           <button 
-                            disabled={currentUser.role !== 'admin'}
+                            disabled={currentUser.role !== 'admin' || !user.emailVerified}
                             onClick={() => toggleActive(user)}
                             className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors ${user.active ? 'bg-green-50 text-green-700 border-green-100' : 'bg-orange-50 text-orange-700 border-orange-100'}`}
                           >
@@ -202,18 +215,21 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
                     </div>
                   )}
                 </td>
-                <td className="px-6 py-3 text-xs text-gray-600">{user.email}</td>
+                <td className="px-6 py-3 text-xs text-gray-600">
+                    {user.email}
+                    {!user.emailVerified && <div className="text-[10px] text-red-500 italic mt-0.5">Not Verified</div>}
+                </td>
                 <td className="px-6 py-3">
                    <span className="capitalize text-xs font-medium px-2 py-0.5 bg-gray-100 rounded text-gray-700">{user.role}</span>
                 </td>
                 <td className="px-6 py-3">
                   <button 
-                    disabled={currentUser.role !== 'admin'}
+                    disabled={currentUser.role !== 'admin' || !user.emailVerified}
                     onClick={() => toggleActive(user)}
-                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors ${user.active ? 'bg-green-50 text-green-700 border-green-100' : 'bg-orange-50 text-orange-700 border-orange-100'} ${currentUser.role === 'admin' ? 'cursor-pointer hover:shadow-sm' : 'cursor-default'}`}
+                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors ${user.active ? 'bg-green-50 text-green-700 border-green-100' : 'bg-orange-50 text-orange-700 border-orange-100'} ${currentUser.role === 'admin' && user.emailVerified ? 'cursor-pointer hover:shadow-sm' : 'cursor-default opacity-60'}`}
                   >
                     {user.active ? <CheckCircle size={10} /> : <UserCheck size={10} />}
-                    {user.active ? (lang === 'fr' ? 'Actif' : 'Active') : (lang === 'fr' ? 'En attente' : 'Pending Approval')}
+                    {user.active ? (lang === 'fr' ? 'Actif' : 'Active') : (lang === 'fr' ? 'En attente' : 'Pending')}
                   </button>
                 </td>
                 <td className="px-6 py-3 text-right">
@@ -270,6 +286,30 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
             <Button type="submit">{editingUser ? t.update : t.add}</Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Deletion Confirmation Modal */}
+      <Modal
+        isOpen={deleteConfirmation.isOpen}
+        onClose={() => setDeleteConfirmation({ isOpen: false, userId: null })}
+        title={t.delete + '?'}
+        size="sm"
+      >
+          <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                  {lang === 'fr' 
+                    ? 'Êtes-vous sûr de vouloir supprimer cet utilisateur ?' 
+                    : 'Are you sure you want to delete this user?'}
+              </p>
+              <div className="flex justify-end gap-3">
+                  <Button variant="ghost" onClick={() => setDeleteConfirmation({ isOpen: false, userId: null })}>
+                      {t.cancel}
+                  </Button>
+                  <Button variant="danger" onClick={executeDelete}>
+                      {t.delete}
+                  </Button>
+              </div>
+          </div>
       </Modal>
     </div>
   );

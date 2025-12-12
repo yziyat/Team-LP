@@ -21,6 +21,8 @@ import {
   createUserWithEmailAndPassword,
   signOut, 
   onAuthStateChanged,
+  updateProfile,
+  sendEmailVerification,
   User as FirebaseUser
 } from 'firebase/auth';
 
@@ -68,7 +70,7 @@ export const useDataStore = () => {
     setNotifications(prev => [...prev, { id, message, type }]);
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== id));
-    }, 1500); 
+    }, 4000); // Slightly longer timeout to read error messages
   };
 
   const handleFirestoreError = (error: any) => {
@@ -96,7 +98,7 @@ export const useDataStore = () => {
 
   // --- Auth Subscription ---
   useEffect(() => {
-      const unsubscribe = onAuthStateChanged(auth, (user) => {
+      const unsubscribe = onAuthStateChanged(auth, async (user) => {
           setFirebaseUser(user);
           setAuthLoading(false);
           if (!user) {
@@ -110,6 +112,25 @@ export const useDataStore = () => {
               setPermissionError(false);
           } else {
               setPermissionError(false); 
+              
+              // SYNC LOGIC: Check if user is verified in Auth but not in Firestore
+              if (user.emailVerified) {
+                  try {
+                       const usersRef = collection(db, "users");
+                       const q = query(usersRef, where("email", "==", user.email));
+                       const snapshot = await getDocs(q);
+                       if (!snapshot.empty) {
+                           const docSnap = snapshot.docs[0];
+                           const userData = docSnap.data() as User;
+                           if (!userData.emailVerified) {
+                               console.log("Syncing emailVerified status to Firestore...");
+                               await updateDoc(docSnap.ref, { emailVerified: true });
+                           }
+                       }
+                  } catch(e) { console.error("Sync error", e); }
+              }
+
+              // Basic check/sync only if user is logged in but doc missing (Legacy support)
               (async () => {
                   if (!user.email) return;
                   try {
@@ -118,7 +139,8 @@ export const useDataStore = () => {
                       const snapshot = await getDocs(q);
                       
                       if (snapshot.empty) {
-                          console.log("User not found in Firestore. Creating profile...");
+                          // NOTE: We generally want signUp to handle creation, this is a fallback
+                          console.log("User doc missing in Firestore. Creating fallback...");
                           let isFirstUser = false;
                           try {
                              const allUsersSnap = await getDocs(query(usersRef, limit(1)));
@@ -132,19 +154,17 @@ export const useDataStore = () => {
                               name: user.displayName || user.email.split('@')[0],
                               email: user.email,
                               role: isFirstUser ? 'admin' : 'viewer',
-                              active: true 
+                              active: isFirstUser, // Only active if first user (Admin)
+                              emailVerified: user.emailVerified
                           };
                           
                           await setDoc(doc(db, "users", String(newUser.id)), newUser);
-                          notify("User profile synchronized", "info");
                       }
                   } catch (e: any) {
                       const isPermissionError = e.code === 'permission-denied' || 
                                                 e.message?.includes('Missing or insufficient permissions');
                       if (!isPermissionError) {
                           console.error("Error syncing user profile", e);
-                      } else {
-                          console.warn("Auto-sync: Permission denied (using virtual user). Check Firestore Rules.");
                       }
                   }
               })();
@@ -163,8 +183,9 @@ export const useDataStore = () => {
         id: 0,
         name: firebaseUser.displayName || firebaseUser.email.split('@')[0],
         email: firebaseUser.email,
-        role: users.length === 0 ? 'admin' : 'viewer',
-        active: true
+        role: 'viewer', // Secure default
+        active: false, // Secure default
+        emailVerified: firebaseUser.emailVerified
     };
     
     return [...users, virtualUser];
@@ -185,6 +206,8 @@ export const useDataStore = () => {
               msg = "Invalid email or password.";
           } else if (errorCode === 'auth/too-many-requests') {
               msg = "Too many failed attempts. Try again later.";
+          } else if (errorCode === 'auth/network-request-failed') {
+              msg = "Network error. Please check your connection.";
           } else {
               console.error("Login Error:", error);
               if (error.message) msg += `: ${error.message}`;
@@ -194,27 +217,80 @@ export const useDataStore = () => {
       }
   };
 
-  const signUp = async (email: string, pass: string) => {
+  const signUp = async (email: string, pass: string, firstName: string = '', lastName: string = '') => {
       try {
-          await createUserWithEmailAndPassword(auth, email, pass);
-          // Wait for auth state change to handle profile creation
+          // 1. Create Auth User
+          const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+          const user = userCredential.user;
+          
+          // 2. Send Verification Email
+          await sendEmailVerification(user);
+
+          const fullName = `${firstName} ${lastName}`.trim() || email.split('@')[0];
+
+          // 3. Update Auth Profile
+          await updateProfile(user, { displayName: fullName });
+
+          // 4. Determine if this is the first user (Admin)
+          let isFirstUser = false;
+          try {
+              const usersRef = collection(db, "users");
+              const allUsersSnap = await getDocs(query(usersRef, limit(1)));
+              isFirstUser = allUsersSnap.empty;
+          } catch(e) {
+              console.warn("Could not determine if first user", e);
+          }
+
+          // 5. Create Firestore Document explicitly
+          // IMPORTANT: active is FALSE and emailVerified is FALSE initially.
+          const newUser: User = {
+              id: Date.now(),
+              name: fullName,
+              email: user.email!,
+              role: isFirstUser ? 'admin' : 'viewer',
+              active: isFirstUser, // TRUE only if first user
+              emailVerified: isFirstUser // First user is implicitly trusted or will verify
+          };
+
+          await setDoc(doc(db, "users", String(newUser.id)), newUser);
+          
+          notify("Account created! Please check your email to verify.", "info");
           return true;
       } catch (error: any) {
           let msg = "Sign up failed";
           const errorCode = error.code;
 
           if (errorCode === 'auth/email-already-in-use') {
-              msg = "Email already in use. Please Log In instead.";
+              msg = "This email is already registered. Please Log In.";
           } else if (errorCode === 'auth/weak-password') {
-              msg = "Password should be at least 6 characters.";
+              msg = "Password is too weak. It should be at least 6 characters.";
           } else if (errorCode === 'auth/invalid-email') {
-              msg = "Invalid email address.";
+              msg = "The email address is invalid.";
+          } else if (errorCode === 'auth/network-request-failed') {
+              msg = "Network error. Please check your internet connection.";
+          } else if (errorCode === 'auth/operation-not-allowed') {
+              msg = "Email/Password sign-up is not enabled in Firebase Console.";
           } else {
               console.error("Signup Error:", error);
               if (error.message) msg += `: ${error.message}`;
           }
           notify(msg, 'error');
           return false;
+      }
+  };
+
+  const resendVerification = async () => {
+      if (auth.currentUser && !auth.currentUser.emailVerified) {
+          try {
+            await sendEmailVerification(auth.currentUser);
+            notify("Verification email sent.", "success");
+          } catch(e: any) {
+             if (e.code === 'auth/too-many-requests') {
+                 notify("Too many requests. Please wait before retrying.", "error");
+             } else {
+                 notify("Failed to send email.", "error");
+             }
+          }
       }
   };
 
@@ -574,7 +650,7 @@ export const useDataStore = () => {
   const addUser = async (user: Omit<User, 'id'>) => {
     const id = Date.now();
     try {
-      await setDoc(doc(db, "users", String(id)), { ...user, id });
+      await setDoc(doc(db, "users", String(id)), { ...user, id, emailVerified: true }); // Admin added users are verified
       addLog('CREATE_USER', `Created user ${user.name}`);
       notify('User added');
     } catch (e) {
@@ -591,7 +667,8 @@ export const useDataStore = () => {
              email: firebaseUser.email,
              role: data.role || 'viewer',
              active: data.active ?? true,
-             employeeId: data.employeeId
+             employeeId: data.employeeId,
+             emailVerified: firebaseUser.emailVerified
          };
          try {
              await setDoc(doc(db, "users", String(newId)), newUser);
@@ -741,6 +818,7 @@ export const useDataStore = () => {
     firebaseUser,
     login,
     signUp,
+    resendVerification,
     logout,
     notify,
     addEmployee,

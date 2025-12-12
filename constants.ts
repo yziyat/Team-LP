@@ -2,9 +2,9 @@
 import { AppSettings, User, TranslationKey } from './types';
 
 export const DEFAULT_USERS: User[] = [
-  { id: 1, name: 'Admin', email: 'admin@ysn.com', role: 'admin', active: true },
-  { id: 2, name: 'John Editor', email: 'john@ysn.com', role: 'editor', active: true },
-  { id: 3, name: 'Jane Viewer', email: 'jane@ysn.com', role: 'viewer', active: false }
+  { id: 1, name: 'Admin', email: 'admin@ysn.com', role: 'admin', active: true, emailVerified: true },
+  { id: 2, name: 'John Editor', email: 'john@ysn.com', role: 'editor', active: true, emailVerified: true },
+  { id: 3, name: 'Jane Viewer', email: 'jane@ysn.com', role: 'viewer', active: false, emailVerified: true }
 ];
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -137,7 +137,11 @@ export const TRANSLATIONS: Record<'fr' | 'en', Record<TranslationKey, string>> =
     training_dashboard: 'Tableau de Bord des Formations',
     beneficiaries: 'Bénéficiaires',
     training_history: 'Historique des Formations',
-    attendees: 'Présents'
+    attendees: 'Présents',
+    verify_email_title: 'Vérifiez votre email',
+    verify_email_desc: 'Un email de vérification a été envoyé à',
+    resend_email: 'Renvoyer l\'email',
+    email_sent: 'Email envoyé !'
   },
   en: {
     home: 'Home',
@@ -232,6 +236,10 @@ export const TRANSLATIONS: Record<'fr' | 'en', Record<TranslationKey, string>> =
     training_dashboard: 'Training Dashboard',
     beneficiaries: 'Beneficiaries',
     training_history: 'Training History',
-    attendees: 'Present'
+    attendees: 'Present',
+    verify_email_title: 'Verify your email',
+    verify_email_desc: 'A verification email has been sent to',
+    resend_email: 'Resend Email',
+    email_sent: 'Email sent!'
   }
 };

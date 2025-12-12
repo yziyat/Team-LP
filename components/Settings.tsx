@@ -48,6 +48,30 @@ export const Settings: React.FC<SettingsProps> = ({
   const [newTeamLeader, setNewTeamLeader] = useState<string>('');
   const [selectedMembers, setSelectedMembers] = useState<number[]>([]);
 
+  // Deletion Confirmation State
+  const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'shift' | 'absence' | 'holiday' | 'team', id: any } | null>(null);
+
+  const confirmDelete = (type: 'shift' | 'absence' | 'holiday' | 'team', id: any) => {
+    setDeleteConfirm({ type, id });
+  };
+
+  const executeDelete = () => {
+    if (!deleteConfirm) return;
+    const { type, id } = deleteConfirm;
+    if (type === 'shift') {
+        const newShifts = settings.shifts.filter((_, i) => i !== id);
+        onUpdateSettings('shifts', newShifts);
+    } else if (type === 'absence') {
+        onUpdateSettings('absenceTypes', settings.absenceTypes.filter(a => a.name !== id));
+    } else if (type === 'holiday') {
+        onUpdateSettings('holidays', settings.holidays.filter(h => h.date !== id));
+        if (editingHolidayOldDate === id) handleCancelEditHoliday();
+    } else if (type === 'team') {
+        onDeleteTeam(id);
+    }
+    setDeleteConfirm(null);
+  };
+
   // Category Handlers
   const handleAddCategory = () => {
     if (newCategory && !settings.categories.includes(newCategory)) {
@@ -105,12 +129,6 @@ export const Settings: React.FC<SettingsProps> = ({
       setIsAbsenceModalOpen(false);
   };
 
-  const handleRemoveAbsence = (absName: string) => {
-    if(window.confirm(t.delete + '?')) {
-        onUpdateSettings('absenceTypes', settings.absenceTypes.filter(a => a.name !== absName));
-    }
-  };
-
   // Holiday Handlers
   const handleAddHoliday = (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,13 +169,6 @@ export const Settings: React.FC<SettingsProps> = ({
     setEditingHolidayOldDate(null);
   };
 
-  const handleRemoveHoliday = (date: string) => {
-    if(window.confirm(t.delete + '?')) {
-      onUpdateSettings('holidays', settings.holidays.filter(h => h.date !== date));
-      if (editingHolidayOldDate === date) handleCancelEditHoliday();
-    }
-  };
-
   // Shift Handlers
   const handleOpenShiftModal = (index?: number) => {
     if (index !== undefined) {
@@ -181,13 +192,6 @@ export const Settings: React.FC<SettingsProps> = ({
       }
       onUpdateSettings('shifts', newShifts);
       setIsShiftModalOpen(false);
-    }
-  };
-
-  const handleDeleteShift = (index: number) => {
-    if (window.confirm(t.delete + '?')) {
-      const newShifts = settings.shifts.filter((_, i) => i !== index);
-      onUpdateSettings('shifts', newShifts);
     }
   };
 
@@ -308,7 +312,7 @@ export const Settings: React.FC<SettingsProps> = ({
                             <button onClick={() => handleOpenShiftModal(index)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded hover:bg-white transition-colors">
                             <Edit2 size={14} />
                             </button>
-                            <button onClick={() => handleDeleteShift(index)} className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-white transition-colors">
+                            <button onClick={() => confirmDelete('shift', index)} className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-white transition-colors">
                             <Trash2 size={14} />
                             </button>
                         </div>
@@ -340,7 +344,7 @@ export const Settings: React.FC<SettingsProps> = ({
                             <button onClick={() => handleOpenAbsenceModal(abs)} className="p-1.5 text-gray-400 hover:text-blue-600 rounded hover:bg-white transition-colors">
                             <Edit2 size={14} />
                             </button>
-                            <button onClick={() => handleRemoveAbsence(abs.name)} className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-white transition-colors">
+                            <button onClick={() => confirmDelete('absence', abs.name)} className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-white transition-colors">
                             <Trash2 size={14} />
                             </button>
                         </div>
@@ -379,7 +383,7 @@ export const Settings: React.FC<SettingsProps> = ({
                             <button onClick={() => handleOpenTeamModal(team)} className="text-gray-400 hover:text-blue-500 transition-colors p-1">
                                 <Edit2 size={18} />
                             </button>
-                            <button onClick={() => onDeleteTeam(team.id)} className="text-gray-400 hover:text-red-500 transition-colors p-1">
+                            <button onClick={() => confirmDelete('team', team.id)} className="text-gray-400 hover:text-red-500 transition-colors p-1">
                                 <Trash2 size={18} />
                             </button>
                             </div>
@@ -444,7 +448,7 @@ export const Settings: React.FC<SettingsProps> = ({
                             <button onClick={() => handleEditHoliday(h)} className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title={t.edit}>
                             <Edit2 size={14} />
                             </button>
-                            <button onClick={() => handleRemoveHoliday(h.date)} className="p-1.5 text-red-400 hover:text-red-700 hover:bg-red-50 rounded transition-colors" title={t.delete}>
+                            <button onClick={() => confirmDelete('holiday', h.date)} className="p-1.5 text-red-400 hover:text-red-700 hover:bg-red-50 rounded transition-colors" title={t.delete}>
                             <Trash2 size={14} />
                             </button>
                         </div>
@@ -701,6 +705,30 @@ export const Settings: React.FC<SettingsProps> = ({
                 </Button>
             </div>
         </form>
+      </Modal>
+
+      {/* Deletion Confirmation Modal */}
+      <Modal
+        isOpen={!!deleteConfirm}
+        onClose={() => setDeleteConfirm(null)}
+        title={t.delete + '?'}
+        size="sm"
+      >
+          <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                  {settings.language === 'fr' 
+                    ? 'Êtes-vous sûr de vouloir supprimer cet élément ?' 
+                    : 'Are you sure you want to delete this item?'}
+              </p>
+              <div className="flex justify-end gap-3">
+                  <Button variant="ghost" onClick={() => setDeleteConfirm(null)}>
+                      {t.cancel}
+                  </Button>
+                  <Button variant="danger" onClick={executeDelete}>
+                      {t.delete}
+                  </Button>
+              </div>
+          </div>
       </Modal>
     </div>
   );

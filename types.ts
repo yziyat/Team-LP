@@ -52,6 +52,7 @@ export interface User {
   email: string;
   role: 'admin' | 'editor' | 'viewer' | 'manager';
   active: boolean;
+  emailVerified?: boolean; // New field to track email verification status in Firestore
   employeeId?: number; // Link to an employee profile (for Team Leaders)
 }
 
@@ -123,4 +124,5 @@ export type TranslationKey =
   | 'status_planned' | 'status_in_progress' | 'status_validated' | 'status_archived'
   | 'training_title' | 'training_sessions' | 'training_target' | 'training_participants' | 'training_attendance'
   | 'manage_participants' | 'mark_attendance' | 'validate_step' | 'archive' | 'back_step'
-  | 'training_dashboard' | 'beneficiaries' | 'training_history' | 'attendees';
+  | 'training_dashboard' | 'beneficiaries' | 'training_history' | 'attendees'
+  | 'verify_email_title' | 'verify_email_desc' | 'resend_email' | 'email_sent';
