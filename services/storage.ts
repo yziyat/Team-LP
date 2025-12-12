@@ -48,6 +48,11 @@ const getDiff = (oldObj: any, newObj: any) => {
   return changes.join(', ');
 };
 
+const capitalize = (str: string) => {
+    if (!str) return '';
+    return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+};
+
 export const useDataStore = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -243,7 +248,10 @@ export const useDataStore = () => {
           // 2. Send Verification Email
           await sendEmailVerification(user);
 
-          const fullName = `${firstName} ${lastName}`.trim() || email.split('@')[0];
+          // Format Name properly
+          const cleanFirst = capitalize(firstName.trim());
+          const cleanLast = capitalize(lastName.trim());
+          const fullName = `${cleanFirst} ${cleanLast}`.trim() || email.split('@')[0];
 
           // 3. Update Auth Profile
           await updateProfile(user, { displayName: fullName });

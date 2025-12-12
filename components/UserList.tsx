@@ -27,7 +27,8 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
   
   // Form State
   const [formData, setFormData] = useState({ 
-    name: '', 
+    firstName: '',
+    lastName: '',
     email: '', 
     role: 'viewer' as User['role'], 
     employeeId: '' as string,
@@ -37,8 +38,14 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
   const openModal = (user?: User, forceActiveState?: boolean) => {
     if (user) {
       setEditingUser(user);
+      // Split name blindly by first space
+      const nameParts = user.name.split(' ');
+      const fName = nameParts[0] || '';
+      const lName = nameParts.slice(1).join(' ') || '';
+      
       setFormData({
-        name: user.name,
+        firstName: fName,
+        lastName: lName,
         email: user.email,
         role: user.role,
         employeeId: user.employeeId ? String(user.employeeId) : '',
@@ -47,7 +54,8 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
     } else {
       setEditingUser(null);
       setFormData({ 
-        name: '', 
+        firstName: '',
+        lastName: '',
         email: '', 
         role: 'viewer', 
         employeeId: '',
@@ -59,8 +67,9 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const fullName = `${formData.firstName} ${formData.lastName}`.trim();
     const payload = {
-      name: formData.name,
+      name: fullName,
       email: formData.email,
       role: formData.role,
       // Fix: Send null instead of undefined/empty string for Firestore compatibility
@@ -270,10 +279,17 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
         title={editingUser ? (lang === 'fr' ? 'Modifier utilisateur' : 'Edit User') : (lang === 'fr' ? 'Ajouter un utilisateur' : 'Add User')}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nom / Name</label>
-            <input required type="text" className="w-full px-3 py-2 border rounded-lg" 
-              value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Prénom / First Name</label>
+              <input required type="text" className="w-full px-3 py-2 border rounded-lg" 
+                value={formData.firstName} onChange={e => setFormData({...formData, firstName: e.target.value})} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nom / Last Name</label>
+              <input required type="text" className="w-full px-3 py-2 border rounded-lg" 
+                value={formData.lastName} onChange={e => setFormData({...formData, lastName: e.target.value})} />
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
