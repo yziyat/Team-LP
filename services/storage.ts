@@ -3,16 +3,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Employee, User, Team, AppSettings, PlanningData, Bonus, AuditLogEntry, Notification, Training } from '../types';
 import { DEFAULT_USERS, DEFAULT_SETTINGS } from '../constants';
 import { db, auth } from './firebase';
-import * as firestore from 'firebase/firestore';
 import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword,
-  signOut, 
-  onAuthStateChanged,
-  User as FirebaseUser
-} from 'firebase/auth';
-
-const { 
   collection, 
   doc, 
   setDoc, 
@@ -24,7 +15,14 @@ const {
   getDocs,
   limit,
   where
-} = firestore as any;
+} from 'firebase/firestore';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword,
+  signOut, 
+  onAuthStateChanged,
+  User as FirebaseUser
+} from 'firebase/auth';
 
 // Helper to calculate diffs for logging
 const getDiff = (oldObj: any, newObj: any) => {
@@ -56,7 +54,7 @@ export const useDataStore = () => {
   const [planning, setPlanning] = useState<PlanningData>({});
   const [bonuses, setBonuses] = useState<Bonus[]>([]);
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
-  const [trainings, setTrainings] = useState<Training[]>([]); // New state
+  const [trainings, setTrainings] = useState<Training[]>([]);
   
   const [notifications, setNotifications] = useState<Notification[]>([]);
   
@@ -70,7 +68,7 @@ export const useDataStore = () => {
     setNotifications(prev => [...prev, { id, message, type }]);
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== id));
-    }, 5000);
+    }, 1500); 
   };
 
   const handleFirestoreError = (error: any) => {
@@ -79,7 +77,6 @@ export const useDataStore = () => {
                                 error.toString().includes('Missing or insufficient permissions');
 
       if (isPermissionError) {
-          // Warning with clear instructions
           console.warn("Firestore Permission Error: Data cannot be read/written.");
           console.warn("SOLUTION: Copy the content of 'firestore.rules' to your Firebase Console > Firestore Database > Rules.");
       } else {
@@ -103,7 +100,6 @@ export const useDataStore = () => {
           setFirebaseUser(user);
           setAuthLoading(false);
           if (!user) {
-              // Clear data on logout
               setEmployees([]);
               setTeams([]);
               setUsers([]);
@@ -113,9 +109,7 @@ export const useDataStore = () => {
               setTrainings([]);
               setPermissionError(false);
           } else {
-              setPermissionError(false); // Reset on login
-              
-              // Auto-sync: Check if user exists in Firestore, if not create it
+              setPermissionError(false); 
               (async () => {
                   if (!user.email) return;
                   try {
@@ -125,13 +119,11 @@ export const useDataStore = () => {
                       
                       if (snapshot.empty) {
                           console.log("User not found in Firestore. Creating profile...");
-                          // Check if this is the first user (make admin)
                           let isFirstUser = false;
                           try {
                              const allUsersSnap = await getDocs(query(usersRef, limit(1)));
                              isFirstUser = allUsersSnap.empty;
                           } catch (e) {
-                             // If list fails (permissions), default to assuming we might be first or just proceed safely
                              console.warn("Could not check user list size", e);
                           }
                           
@@ -147,11 +139,8 @@ export const useDataStore = () => {
                           notify("User profile synchronized", "info");
                       }
                   } catch (e: any) {
-                      // Silence permission errors during auto-sync to avoid UI noise.
                       const isPermissionError = e.code === 'permission-denied' || 
-                                                e.message?.includes('Missing or insufficient permissions') ||
-                                                e.toString().includes('Missing or insufficient permissions');
-
+                                                e.message?.includes('Missing or insufficient permissions');
                       if (!isPermissionError) {
                           console.error("Error syncing user profile", e);
                       } else {
@@ -164,21 +153,17 @@ export const useDataStore = () => {
       return () => unsubscribe();
   }, []);
 
-  // Compute effective users list
-  // If the authenticated user is NOT in the DB list (due to sync delay or permission error),
-  // inject them as a "Virtual User" so they appear in the UI and can act as Admin.
   const effectiveUsers = useMemo(() => {
     if (!firebaseUser || !firebaseUser.email) return users;
     
     const exists = users.some(u => u.email.toLowerCase() === firebaseUser.email?.toLowerCase());
     if (exists) return users;
 
-    // Create Virtual User
     const virtualUser: User = {
-        id: 0, // ID 0 marks it as virtual
+        id: 0,
         name: firebaseUser.displayName || firebaseUser.email.split('@')[0],
         email: firebaseUser.email,
-        role: users.length === 0 ? 'admin' : 'viewer', // Be Admin if list is empty (first user scenario)
+        role: users.length === 0 ? 'admin' : 'viewer',
         active: true
     };
     
@@ -190,11 +175,13 @@ export const useDataStore = () => {
           await signInWithEmailAndPassword(auth, email, pass);
           return true;
       } catch (error: any) {
-          // Do not console.error expected auth errors to keep console clean
           let msg = "Login failed";
           const errorCode = error.code;
           
-          if (errorCode === 'auth/invalid-credential' || errorCode === 'auth/user-not-found' || errorCode === 'auth/wrong-password') {
+          if (errorCode === 'auth/invalid-credential' || 
+              errorCode === 'auth/user-not-found' || 
+              errorCode === 'auth/wrong-password' || 
+              errorCode === 'auth/invalid-login-credentials') {
               msg = "Invalid email or password.";
           } else if (errorCode === 'auth/too-many-requests') {
               msg = "Too many failed attempts. Try again later.";
@@ -210,43 +197,18 @@ export const useDataStore = () => {
   const signUp = async (email: string, pass: string) => {
       try {
           await createUserWithEmailAndPassword(auth, email, pass);
-          
-          let isFirstUser = false;
-          try {
-             const usersRef = collection(db, "users");
-             const snapshot = await getDocs(query(usersRef, limit(1)));
-             isFirstUser = snapshot.empty;
-          } catch (e) {
-             console.log("Could not check for first user, defaulting to standard flow");
-          }
-
-          const newUser: User = {
-              id: Date.now(),
-              name: email.split('@')[0],
-              email: email,
-              role: isFirstUser ? 'admin' : 'viewer',
-              active: isFirstUser ? true : false, 
-          };
-
-          await setDoc(doc(db, "users", String(newUser.id)), newUser);
-          
-          if (isFirstUser) {
-              notify("Admin account created successfully!", 'success');
-          } else {
-              notify("Account created! Please wait for admin approval.", 'success');
-          }
+          // Wait for auth state change to handle profile creation
           return true;
       } catch (error: any) {
           let msg = "Sign up failed";
-          if (error.code === 'auth/email-already-in-use') {
+          const errorCode = error.code;
+
+          if (errorCode === 'auth/email-already-in-use') {
               msg = "Email already in use. Please Log In instead.";
-          } else if (error.code === 'auth/weak-password') {
+          } else if (errorCode === 'auth/weak-password') {
               msg = "Password should be at least 6 characters.";
-          } else if (error.code === 'auth/invalid-email') {
+          } else if (errorCode === 'auth/invalid-email') {
               msg = "Invalid email address.";
-          } else if (error.code === 'permission-denied') {
-              msg = "Account created but profile sync failed. Check Firestore Rules.";
-              console.error("Signup Permission Error:", error);
           } else {
               console.error("Signup Error:", error);
               if (error.message) msg += `: ${error.message}`;
@@ -264,45 +226,41 @@ export const useDataStore = () => {
       }
   };
 
-  // --- Firestore Subscriptions (Only when authenticated) ---
-
-  // Employees
+  // --- Firestore Subscriptions ---
+  
   useEffect(() => {
     if (!firebaseUser) return;
     const q = query(collection(db, "employees"));
     const unsubscribe = onSnapshot(q, (snapshot: any) => {
       const items: Employee[] = [];
-      snapshot.forEach((doc: any) => items.push(doc.data() as Employee));
+      snapshot.forEach((doc: any) => items.push({ ...doc.data(), _docId: doc.id } as any));
       setEmployees(items);
     }, handleFirestoreError);
     return () => unsubscribe();
   }, [firebaseUser]);
 
-  // Teams
   useEffect(() => {
     if (!firebaseUser) return;
     const q = query(collection(db, "teams"));
     const unsubscribe = onSnapshot(q, (snapshot: any) => {
       const items: Team[] = [];
-      snapshot.forEach((doc: any) => items.push(doc.data() as Team));
+      snapshot.forEach((doc: any) => items.push({ ...doc.data(), _docId: doc.id } as any));
       setTeams(items);
     }, handleFirestoreError);
     return () => unsubscribe();
   }, [firebaseUser]);
 
-  // Users
   useEffect(() => {
     if (!firebaseUser) return;
     const q = query(collection(db, "users"));
     const unsubscribe = onSnapshot(q, (snapshot: any) => {
       const items: User[] = [];
-      snapshot.forEach((doc: any) => items.push(doc.data() as User));
+      snapshot.forEach((doc: any) => items.push({ ...doc.data(), _docId: doc.id } as any));
       setUsers(items);
     }, handleFirestoreError);
     return () => unsubscribe();
   }, [firebaseUser]);
 
-  // Settings
   useEffect(() => {
     if (!firebaseUser) return;
     const docRef = doc(db, "config", "settings");
@@ -317,17 +275,15 @@ export const useDataStore = () => {
         }
         setSettings({ ...DEFAULT_SETTINGS, ...data });
       } else {
-        setDoc(docRef, DEFAULT_SETTINGS).catch((err: any) => console.log("Init settings failed (likely permissions)", err));
+        setDoc(docRef, DEFAULT_SETTINGS).catch((err: any) => console.log("Init settings failed", err));
         setSettings(DEFAULT_SETTINGS);
       }
     }, (error: any) => {
-         // Silently handle settings error to default
          console.warn("Settings sync failed (using defaults):", error.message);
     });
     return () => unsubscribe();
   }, [firebaseUser]);
 
-  // Planning
   useEffect(() => {
     if (!firebaseUser) return;
     const q = query(collection(db, "planning"));
@@ -342,31 +298,28 @@ export const useDataStore = () => {
     return () => unsubscribe();
   }, [firebaseUser]);
 
-  // Bonuses
   useEffect(() => {
     if (!firebaseUser) return;
     const q = query(collection(db, "bonuses"));
     const unsubscribe = onSnapshot(q, (snapshot: any) => {
       const items: Bonus[] = [];
-      snapshot.forEach((doc: any) => items.push(doc.data() as Bonus));
+      snapshot.forEach((doc: any) => items.push({ ...doc.data(), _docId: doc.id } as any));
       setBonuses(items);
     }, handleFirestoreError);
     return () => unsubscribe();
   }, [firebaseUser]);
 
-  // Trainings
   useEffect(() => {
     if (!firebaseUser) return;
     const q = query(collection(db, "trainings"));
     const unsubscribe = onSnapshot(q, (snapshot: any) => {
       const items: Training[] = [];
-      snapshot.forEach((doc: any) => items.push(doc.data() as Training));
+      snapshot.forEach((doc: any) => items.push({ ...doc.data(), _docId: doc.id } as any));
       setTrainings(items);
     }, handleFirestoreError);
     return () => unsubscribe();
   }, [firebaseUser]);
 
-  // Logs
   useEffect(() => {
     if (!firebaseUser) return;
     const q = query(collection(db, "audit_logs"), orderBy("timestamp", "desc"));
@@ -397,9 +350,55 @@ export const useDataStore = () => {
     }
   };
 
+  // Improved Robust Deletion
+  const robustDelete = async (collectionName: string, id: number | string, docId?: string) => {
+      let deleted = false;
+      
+      // 1. Try known Doc ID from Snapshot (Direct Hit)
+      if (docId) {
+          try {
+            await deleteDoc(doc(db, collectionName, docId));
+            deleted = true;
+          } catch(e) { console.warn("Robust delete: docId failed", e); }
+      }
+      
+      // Continue to cleanup ANY potential duplicates (ghost records) with the same ID field
+      
+      // 2. Query by Number ID
+      if (!isNaN(Number(id))) {
+          try {
+            const qNum = query(collection(db, collectionName), where("id", "==", Number(id)));
+            const snapNum = await getDocs(qNum);
+            for (const d of snapNum.docs) { 
+                await deleteDoc(d.ref); 
+                deleted = true; 
+            }
+          } catch(e) {}
+      }
+
+      // 3. Query by String ID
+      try {
+        const qStr = query(collection(db, collectionName), where("id", "==", String(id)));
+        const snapStr = await getDocs(qStr);
+        for (const d of snapStr.docs) { 
+            await deleteDoc(d.ref); 
+            deleted = true; 
+        }
+      } catch(e) {}
+
+      // 4. Fallback Direct ID as Key (Legacy)
+      if (!deleted) {
+          try {
+            await deleteDoc(doc(db, collectionName, String(id)));
+            deleted = true;
+          } catch(e) {}
+      }
+      
+      return deleted;
+  };
+
   const addEmployee = async (emp: Omit<Employee, 'id'>) => {
     const id = Date.now();
-    // Sanitize the object to remove any undefined values which Firestore rejects
     const newEmp = JSON.parse(JSON.stringify({ ...emp, id }));
     
     try {
@@ -412,13 +411,14 @@ export const useDataStore = () => {
   };
 
   const updateEmployee = async (id: number, data: Partial<Employee>) => {
-    const oldEmp = employees.find(e => e.id === id);
+    const oldEmp = employees.find(e => e.id == id);
     if (!oldEmp) return;
     
     const diff = getDiff(oldEmp, { ...oldEmp, ...data });
+    const docRef = (oldEmp as any)._docId ? doc(db, "employees", (oldEmp as any)._docId) : doc(db, "employees", String(id));
     
     try {
-      await updateDoc(doc(db, "employees", String(id)), data);
+      await updateDoc(docRef, data);
       
       if (diff) {
           addLog('UPDATE_EMPLOYEE', `Updated Emp ${id}: ${diff}`);
@@ -433,23 +433,30 @@ export const useDataStore = () => {
   };
 
   const deleteEmployee = async (id: number) => {
-    const emp = employees.find(e => e.id === id);
+    const emp = employees.find(e => e.id == id);
+    const docId = (emp as any)?._docId;
+
     try {
-      await deleteDoc(doc(db, "employees", String(id)));
+      await robustDelete("employees", id, docId);
       
+      // Cleanup relations
       teams.forEach(t => {
+        const tDocRef = (t as any)._docId ? doc(db, "teams", (t as any)._docId) : doc(db, "teams", String(t.id));
         if (t.members.includes(id)) {
-           const newMembers = t.members.filter(m => m !== id);
-           updateDoc(doc(db, "teams", String(t.id)), { members: newMembers });
+           const newMembers = t.members.filter(m => m != id); // loose eq
+           updateDoc(tDocRef, { members: newMembers });
         }
-        if (t.leaderId === id) {
-           updateDoc(doc(db, "teams", String(t.id)), { leaderId: '' });
+        if (t.leaderId == id) { // loose eq
+           updateDoc(tDocRef, { leaderId: '' });
         }
       });
 
-      bonuses.filter(b => b.employeeId === id).forEach(b => {
-         deleteDoc(doc(db, "bonuses", b.id));
-      });
+      // Cleanup Bonuses
+      const relatedBonuses = bonuses.filter(b => b.employeeId == id);
+      for (const b of relatedBonuses) {
+          const bDocId = (b as any)._docId || b.id;
+          await deleteDoc(doc(db, "bonuses", bDocId));
+      }
 
       addLog('DELETE_EMPLOYEE', `Deleted employee ${emp?.firstName} ${emp?.lastName} (${id})`);
       notify('Employee deleted');
@@ -466,7 +473,11 @@ export const useDataStore = () => {
       
       if (team.members && team.members.length > 0) {
          team.members.forEach(empId => {
-             updateDoc(doc(db, "employees", String(empId)), { teamId: id });
+             const emp = employees.find(e => e.id == empId);
+             if (emp) {
+                const eDocRef = (emp as any)?._docId ? doc(db, "employees", (emp as any)._docId) : doc(db, "employees", String(empId));
+                updateDoc(eDocRef, { teamId: id });
+             }
          });
       }
 
@@ -478,26 +489,36 @@ export const useDataStore = () => {
   };
 
   const updateTeam = async (id: number, data: Partial<Team>) => {
-    const oldTeam = teams.find(t => t.id === id);
+    const oldTeam = teams.find(t => t.id == id);
     if (!oldTeam) return;
 
     const diff = getDiff(oldTeam, { ...oldTeam, ...data });
+    const docRef = (oldTeam as any)._docId ? doc(db, "teams", (oldTeam as any)._docId) : doc(db, "teams", String(id));
 
     try {
-      await updateDoc(doc(db, "teams", String(id)), data);
+      await updateDoc(docRef, data);
 
       if (data.members) {
         const oldMembers = oldTeam.members;
         const newMembers = data.members;
-        const removedMembers = oldMembers.filter(mId => !newMembers.includes(mId));
-        const addedMembers = newMembers.filter(mId => !oldMembers.includes(mId));
+        
+        const removedMembers = oldMembers.filter(mId => !newMembers.some(nm => nm == mId));
+        const addedMembers = newMembers.filter(mId => !oldMembers.some(om => om == mId));
 
         removedMembers.forEach(mId => {
-             updateDoc(doc(db, "employees", String(mId)), { teamId: null } as any);
+             const emp = employees.find(e => e.id == mId);
+             if (emp) {
+                 const eDocRef = (emp as any)?._docId ? doc(db, "employees", (emp as any)._docId) : doc(db, "employees", String(mId));
+                 updateDoc(eDocRef, { teamId: null } as any);
+             }
         });
         
         addedMembers.forEach(mId => {
-             updateDoc(doc(db, "employees", String(mId)), { teamId: id });
+             const emp = employees.find(e => e.id == mId);
+             if (emp) {
+                 const eDocRef = (emp as any)?._docId ? doc(db, "employees", (emp as any)._docId) : doc(db, "employees", String(mId));
+                 updateDoc(eDocRef, { teamId: id });
+             }
         });
       }
 
@@ -509,12 +530,15 @@ export const useDataStore = () => {
   };
 
   const deleteTeam = async (id: number) => {
-    const team = teams.find(t => t.id === id);
+    const team = teams.find(t => t.id == id);
+    const docId = (team as any)?._docId;
+
     try {
-      await deleteDoc(doc(db, "teams", String(id)));
+      await robustDelete("teams", id, docId);
       
-      employees.filter(e => e.teamId === id).forEach(e => {
-          updateDoc(doc(db, "employees", String(e.id)), { teamId: null } as any);
+      employees.filter(e => e.teamId == id).forEach(e => {
+          const eDocRef = (e as any)?._docId ? doc(db, "employees", (e as any)._docId) : doc(db, "employees", String(e.id));
+          updateDoc(eDocRef, { teamId: null } as any);
       });
 
       addLog('DELETE_TEAM', `Deleted team ${team?.name}`);
@@ -559,7 +583,6 @@ export const useDataStore = () => {
   };
 
   const updateUser = async (id: number, data: Partial<User>) => {
-    // Handle Virtual User (ID 0) Promotion -> Create Real User
     if (id === 0 && firebaseUser && firebaseUser.email) {
          const newId = Date.now();
          const newUser: User = {
@@ -579,10 +602,9 @@ export const useDataStore = () => {
          return;
     }
 
-    const oldUser = users.find(u => u.id === id);
+    const oldUser = users.find(u => u.id == id);
     if (!oldUser) return;
 
-    // PROTECTION: Cannot demote or deactivate the last admin
     if (oldUser.role === 'admin' && oldUser.active) {
          const willLoseAdmin = (data.role && data.role !== 'admin') || (data.active === false);
          if (willLoseAdmin) {
@@ -595,9 +617,10 @@ export const useDataStore = () => {
     }
 
     const diff = getDiff(oldUser, { ...oldUser, ...data });
-    
+    const docRef = (oldUser as any)._docId ? doc(db, "users", (oldUser as any)._docId) : doc(db, "users", String(id));
+
     try {
-      await updateDoc(doc(db, "users", String(id)), data);
+      await updateDoc(docRef, data);
       addLog('UPDATE_USER', `Updated user ID ${id}: ${diff}`);
       notify('User updated');
     } catch (e) {
@@ -606,10 +629,9 @@ export const useDataStore = () => {
   };
 
   const deleteUser = async (id: number) => {
-    const user = users.find(u => u.id === id);
+    const user = users.find(u => u.id == id);
     if (!user) return;
 
-    // PROTECTION: Cannot delete the last admin
     if (user.role === 'admin' && user.active) {
         const adminCount = users.filter(u => u.role === 'admin' && u.active).length;
         if (adminCount <= 1) {
@@ -618,8 +640,10 @@ export const useDataStore = () => {
         }
     }
 
+    const docId = (user as any)._docId;
+
     try {
-      await deleteDoc(doc(db, "users", String(id)));
+      await robustDelete("users", id, docId);
       addLog('DELETE_USER', `Deleted user ${user?.name} (${id})`);
       notify('User deleted');
     } catch (e) {
@@ -631,7 +655,11 @@ export const useDataStore = () => {
     const id = `${employeeId}_${month}`;
     try {
       if (amount === 0) {
-        await deleteDoc(doc(db, "bonuses", id));
+        try { await deleteDoc(doc(db, "bonuses", id)); } catch(e) {}
+        
+        const q = query(collection(db, "bonuses"), where("employeeId", "==", employeeId), where("month", "==", month));
+        const snap = await getDocs(q);
+        snap.forEach(d => deleteDoc(d.ref));
       } else {
         await setDoc(doc(db, "bonuses", id), { id, employeeId, month, amount });
       }
@@ -653,10 +681,30 @@ export const useDataStore = () => {
   };
 
   const updateTraining = async (id: number, data: Partial<Training>) => {
-      const old = trainings.find(t => t.id === id);
+      const old = trainings.find(t => t.id == id);
       if(!old) return;
+      
+      const docRef = (old as any)._docId ? doc(db, "trainings", (old as any)._docId) : doc(db, "trainings", String(id));
+
       try {
-          await updateDoc(doc(db, "trainings", String(id)), data);
+          // Attempt direct update if docId is known
+          if ((old as any)._docId) {
+             await updateDoc(docRef, data);
+          } else {
+             // Fallback
+             let q = query(collection(db, "trainings"), where("id", "==", id));
+             let snapshot = await getDocs(q);
+             if (snapshot.empty) {
+                q = query(collection(db, "trainings"), where("id", "==", String(id)));
+                snapshot = await getDocs(q);
+             }
+             if (!snapshot.empty) {
+                await updateDoc(snapshot.docs[0].ref, data);
+             } else {
+                await updateDoc(docRef, data);
+             }
+          }
+
           if (data.status && data.status !== old.status) {
               addLog('UPDATE_TRAINING_STATUS', `Training ${old.title} moved to ${data.status}`);
           }
@@ -667,10 +715,11 @@ export const useDataStore = () => {
   };
 
   const deleteTraining = async (id: number) => {
-      const t = trainings.find(t => t.id === id);
+      const t = trainings.find(t => t.id == id);
+      const docId = (t as any)?._docId;
       try {
-          await deleteDoc(doc(db, "trainings", String(id)));
-          addLog('DELETE_TRAINING', `Deleted training ${t?.title}`);
+          await robustDelete("trainings", id, docId);
+          addLog('DELETE_TRAINING', `Deleted training ${t?.title || id}`);
           notify('Training deleted');
       } catch (e) {
           handleWriteError(e, "deleting training");
@@ -680,7 +729,7 @@ export const useDataStore = () => {
   return {
     employees,
     teams,
-    users: effectiveUsers, // Use the computed users list that includes virtual fallback
+    users: effectiveUsers, 
     settings,
     planning,
     bonuses,

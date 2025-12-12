@@ -24,14 +24,19 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onSignUp }) => {
         if (!isSignUp) {
             // Set persistence before login
             await setPersistence(auth, rememberMe ? browserLocalPersistence : browserSessionPersistence);
-            await onLogin(email, password);
+            const success = await onLogin(email, password);
+            if (!success) {
+                setPassword(''); // Clear password on failure
+            }
         } else {
-            // Persistence is typically session or local default for new accounts, 
-            // but we can set it here too if needed.
-            await onSignUp(email, password);
+            const success = await onSignUp(email, password);
+             if (!success) {
+                setPassword('');
+            }
         }
     } catch (e) {
         console.error("Auth Error", e);
+        setPassword('');
     }
     
     setIsLoading(false);
