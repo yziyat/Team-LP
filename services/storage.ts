@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Employee, User, Team, AppSettings, PlanningData, Bonus, AuditLogEntry, Notification, Training } from '../types';
 import { DEFAULT_USERS, DEFAULT_SETTINGS } from '../constants';
 import { db, auth } from './firebase';
@@ -60,10 +60,14 @@ export const useDataStore = () => {
   
   const [notifications, setNotifications] = useState<Notification[]>([]);
   
-  // Auth State
+  // Auth & Loading State
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [usersLoading, setUsersLoading] = useState(true); // New: Wait for DB users to load
   const [permissionError, setPermissionError] = useState(false);
+
+  // Ref to prevent race conditions during signup (prevent duplicate creation)
+  const isSigningUp = useRef(false);
 
   const notify = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     const id = Date.now();
@@ -81,10 +85,13 @@ export const useDataStore = () => {
       if (isPermissionError) {
           console.warn("Firestore Permission Error: Data cannot be read/written.");
           console.warn("SOLUTION: Copy the content of 'firestore.rules' to your Firebase Console > Firestore Database > Rules.");
+          setPermissionError(true);
       } else {
           console.error("Firestore Error:", error);
           notify(`Sync Error: ${error.message}`, 'error');
       }
+      // Ensure loading stops even on error so app isn't stuck
+      setUsersLoading(false);
   };
 
   const handleWriteError = (e: any, context: string) => {
@@ -101,6 +108,7 @@ export const useDataStore = () => {
       const unsubscribe = onAuthStateChanged(auth, async (user) => {
           setFirebaseUser(user);
           setAuthLoading(false);
+          
           if (!user) {
               setEmployees([]);
               setTeams([]);
@@ -110,9 +118,13 @@ export const useDataStore = () => {
               setLogs([]);
               setTrainings([]);
               setPermissionError(false);
+              setUsersLoading(true); // Reset for next login
           } else {
               setPermissionError(false); 
               
+              // CRITICAL FIX: Prevent fallback logic if we are in the middle of a signup flow
+              if (isSigningUp.current) return;
+
               // SYNC LOGIC: Check if user is verified in Auth but not in Firestore
               if (user.emailVerified) {
                   try {
@@ -130,16 +142,19 @@ export const useDataStore = () => {
                   } catch(e) { console.error("Sync error", e); }
               }
 
-              // Basic check/sync only if user is logged in but doc missing (Legacy support)
-              (async () => {
+              // Basic check/sync only if user is logged in but doc missing (Legacy support or Manual Auth creation)
+              // We delay this slightly to allow snapshot listener to populate 'users' first
+              setTimeout(async () => {
                   if (!user.email) return;
+                  if (isSigningUp.current) return; // Double check
+
                   try {
                       const usersRef = collection(db, "users");
                       const q = query(usersRef, where("email", "==", user.email));
                       const snapshot = await getDocs(q);
                       
                       if (snapshot.empty) {
-                          // NOTE: We generally want signUp to handle creation, this is a fallback
+                          // NOTE: This is a fallback. Standard SignUp flow handles this via signUp() function.
                           console.log("User doc missing in Firestore. Creating fallback...");
                           let isFirstUser = false;
                           try {
@@ -161,13 +176,9 @@ export const useDataStore = () => {
                           await setDoc(doc(db, "users", String(newUser.id)), newUser);
                       }
                   } catch (e: any) {
-                      const isPermissionError = e.code === 'permission-denied' || 
-                                                e.message?.includes('Missing or insufficient permissions');
-                      if (!isPermissionError) {
-                          console.error("Error syncing user profile", e);
-                      }
+                      // Ignore permission errors here, they are handled elsewhere
                   }
-              })();
+              }, 2000);
           }
       });
       return () => unsubscribe();
@@ -176,15 +187,18 @@ export const useDataStore = () => {
   const effectiveUsers = useMemo(() => {
     if (!firebaseUser || !firebaseUser.email) return users;
     
+    // Check if current firebase user exists in the firestore users list
     const exists = users.some(u => u.email.toLowerCase() === firebaseUser.email?.toLowerCase());
     if (exists) return users;
 
+    // Create a temporary "virtual" user object for UI while Firestore syncs
+    // This prevents "undefined" errors but keeps active=false until real data loads
     const virtualUser: User = {
         id: 0,
         name: firebaseUser.displayName || firebaseUser.email.split('@')[0],
         email: firebaseUser.email,
-        role: 'viewer', // Secure default
-        active: false, // Secure default
+        role: 'viewer', 
+        active: false, 
         emailVerified: firebaseUser.emailVerified
     };
     
@@ -218,6 +232,9 @@ export const useDataStore = () => {
   };
 
   const signUp = async (email: string, pass: string, firstName: string = '', lastName: string = '') => {
+      // SET FLAG TO TRUE: Prevent onAuthStateChanged from creating a duplicate
+      isSigningUp.current = true;
+      
       try {
           // 1. Create Auth User
           const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
@@ -242,7 +259,6 @@ export const useDataStore = () => {
           }
 
           // 5. Create Firestore Document explicitly
-          // IMPORTANT: active is FALSE and emailVerified is FALSE initially.
           const newUser: User = {
               id: Date.now(),
               name: fullName,
@@ -276,6 +292,11 @@ export const useDataStore = () => {
           }
           notify(msg, 'error');
           return false;
+      } finally {
+          // Reset the flag after a short delay to ensure listeners have fired and data is stable
+          setTimeout(() => {
+              isSigningUp.current = false;
+          }, 3000);
       }
   };
 
@@ -333,6 +354,7 @@ export const useDataStore = () => {
       const items: User[] = [];
       snapshot.forEach((doc: any) => items.push({ ...doc.data(), _docId: doc.id } as any));
       setUsers(items);
+      setUsersLoading(false); // Data is loaded, safe to remove Loading Screen / Pending Flash
     }, handleFirestoreError);
     return () => unsubscribe();
   }, [firebaseUser]);
@@ -814,6 +836,7 @@ export const useDataStore = () => {
     trainings,
     notifications,
     authLoading,
+    usersLoading, // Exported to be checked in App.tsx
     permissionError,
     firebaseUser,
     login,

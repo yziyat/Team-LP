@@ -39,7 +39,7 @@ import { TRANSLATIONS } from './constants';
 function App() {
   const { 
     employees, teams, users, settings, planning, bonuses, logs, trainings, notifications,
-    authLoading, firebaseUser, permissionError, login, signUp, logout, resendVerification,
+    authLoading, usersLoading, firebaseUser, permissionError, login, signUp, logout, resendVerification,
     addEmployee, updateEmployee, deleteEmployee,
     updateSettings, addTeam, updateTeam, deleteTeam,
     setPlanningItem, addUser, updateUser, deleteUser,
@@ -119,7 +119,8 @@ function App() {
   const t = TRANSLATIONS[settings.language];
 
   // Authentication Loading Screen
-  if (authLoading) {
+  // WAIT for Auth AND Database Users to load to prevent "Pending Approval" flash on admins
+  if (authLoading || (firebaseUser && usersLoading)) {
      return (
         <div className="h-screen flex items-center justify-center bg-gray-50">
             <Loader2 className="animate-spin text-blue-600" size={48} />

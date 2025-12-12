@@ -30,21 +30,29 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
     name: '', 
     email: '', 
     role: 'viewer' as User['role'], 
-    employeeId: '' as string 
+    employeeId: '' as string,
+    active: true
   });
 
-  const openModal = (user?: User) => {
+  const openModal = (user?: User, forceActiveState?: boolean) => {
     if (user) {
       setEditingUser(user);
       setFormData({
         name: user.name,
         email: user.email,
         role: user.role,
-        employeeId: user.employeeId ? String(user.employeeId) : ''
+        employeeId: user.employeeId ? String(user.employeeId) : '',
+        active: forceActiveState !== undefined ? forceActiveState : user.active
       });
     } else {
       setEditingUser(null);
-      setFormData({ name: '', email: '', role: 'viewer', employeeId: '' });
+      setFormData({ 
+        name: '', 
+        email: '', 
+        role: 'viewer', 
+        employeeId: '',
+        active: true 
+      });
     }
     setIsModalOpen(true);
   };
@@ -55,14 +63,15 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
       name: formData.name,
       email: formData.email,
       role: formData.role,
-      employeeId: formData.employeeId ? Number(formData.employeeId) : undefined
+      employeeId: formData.employeeId ? Number(formData.employeeId) : undefined,
+      active: formData.active
     };
 
     if (editingUser) {
       onUpdateUser(editingUser.id, payload);
     } else {
       // Admin created users are trusted
-      onAddUser({ ...payload, active: true, emailVerified: true });
+      onAddUser({ ...payload, emailVerified: true });
     }
     setIsModalOpen(false);
   };
@@ -71,6 +80,19 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
     if (currentUser.role === 'admin') {
       onUpdateUser(user.id, { active: !user.active });
     }
+  };
+
+  // Handler for the status badge click
+  const handleStatusClick = (user: User) => {
+      if (currentUser.role !== 'admin' || !user.emailVerified) return;
+
+      if (!user.active) {
+          // If Pending, open modal to allow Role selection and Activation together
+          openModal(user, true); // Force active checkbox to true for convenience
+      } else {
+          // If Active, just toggle to inactive
+          toggleActive(user);
+      }
   };
 
   const handleDelete = (id: number) => {
@@ -158,8 +180,8 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
                          </div>
                           <button 
                             disabled={currentUser.role !== 'admin' || !user.emailVerified}
-                            onClick={() => toggleActive(user)}
-                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors ${user.active ? 'bg-green-50 text-green-700 border-green-100' : 'bg-orange-50 text-orange-700 border-orange-100'}`}
+                            onClick={() => handleStatusClick(user)}
+                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors ${user.active ? 'bg-green-50 text-green-700 border-green-100' : 'bg-orange-50 text-orange-700 border-orange-100'} ${currentUser.role === 'admin' && user.emailVerified ? 'cursor-pointer hover:shadow-sm' : 'cursor-default opacity-60'}`}
                           >
                             {user.active ? <CheckCircle size={10} /> : <UserCheck size={10} />}
                             {user.active ? (lang === 'fr' ? 'Actif' : 'Active') : (lang === 'fr' ? 'En attente' : 'Pending')}
@@ -225,7 +247,7 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
                 <td className="px-6 py-3">
                   <button 
                     disabled={currentUser.role !== 'admin' || !user.emailVerified}
-                    onClick={() => toggleActive(user)}
+                    onClick={() => handleStatusClick(user)}
                     className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors ${user.active ? 'bg-green-50 text-green-700 border-green-100' : 'bg-orange-50 text-orange-700 border-orange-100'} ${currentUser.role === 'admin' && user.emailVerified ? 'cursor-pointer hover:shadow-sm' : 'cursor-default opacity-60'}`}
                   >
                     {user.active ? <CheckCircle size={10} /> : <UserCheck size={10} />}
@@ -261,10 +283,10 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
             <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
             <select required className="w-full px-3 py-2 border rounded-lg bg-white"
               value={formData.role} onChange={e => setFormData({...formData, role: e.target.value as any})}>
-              <option value="viewer">Viewer</option>
-              <option value="editor">Editor</option>
+              <option value="viewer">Viewer (Read Only)</option>
+              <option value="editor">Editor (Can Manage)</option>
               <option value="manager">Manager (Team Leader)</option>
-              <option value="admin">Admin</option>
+              <option value="admin">Admin (Full Access)</option>
             </select>
           </div>
           <div>
@@ -281,6 +303,20 @@ export const UserList: React.FC<UserListProps> = ({ users, employees, lang, curr
                ))}
              </select>
           </div>
+          
+          <div className="flex items-center gap-2 pt-2 border-t border-gray-100 mt-2">
+            <input 
+                type="checkbox" 
+                id="userActive"
+                checked={formData.active}
+                onChange={e => setFormData({...formData, active: e.target.checked})}
+                className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+            />
+            <label htmlFor="userActive" className="text-sm font-medium text-gray-700 select-none cursor-pointer">
+                {lang === 'fr' ? 'Compte Actif (Autoriser la connexion)' : 'Account Active (Allow Login)'}
+            </label>
+          </div>
+
           <div className="flex justify-end gap-3 pt-4 border-t">
             <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)}>{t.cancel}</Button>
             <Button type="submit">{editingUser ? t.update : t.add}</Button>
