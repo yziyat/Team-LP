@@ -75,7 +75,9 @@
     "firebase/analytics": "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js",
     "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js",
     "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js",
-    "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/"
+    "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/",
+    "vite": "https://esm.sh/vite@^7.2.7",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
   }
 }
 </script>
@@ -89,7 +91,7 @@
         if (!document.getElementById('root').hasChildNodes()) {
           console.error("App failed to mount:", event.message);
           // Optional: Display error on screen if dev environment
-          // document.body.innerHTML = '<div style="padding:20px; color:red"><h1>Application Error</h1><p>'+event.message+'</p></div>';
+          document.body.innerHTML = '<div style="padding:20px; color:red; font-family:sans-serif;"><h1>Application Error</h1><p>The application failed to start.</p><p style="background:#eee; padding:10px; border-radius:4px;">'+event.message+'</p></div>';
         }
       });
     </script>
