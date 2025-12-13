@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { AppSettings, Bonus as BonusType, Employee, Team, User } from '../types';
 import { TRANSLATIONS } from '../constants';
-import { Filter, Award, Search, History, Download, FileText, Image as ImageIcon, ChevronLeft, ChevronRight, ChevronDown, LayoutList, Grid, Lock } from 'lucide-react';
+import { Filter, Award, Search, History, Download, FileText, Image as ImageIcon, ChevronLeft, ChevronRight, ChevronDown, LayoutList, Grid, Lock, Layers } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -31,6 +31,9 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
   const [searchTerm, setSearchTerm] = useState('');
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   
+  // Grouping State
+  const [groupByCategory, setGroupByCategory] = useState(true);
+
   // Mobile View State
   const [mobileView, setMobileView] = useState<'list' | 'card'>('list');
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
@@ -72,8 +75,16 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
             emp.matricule.toLowerCase().includes(searchTerm.toLowerCase());
         
         return inTeam && emp.isBonusEligible && matchesSearch && !emp.exitDate;
-    }).sort((a, b) => a.firstName.localeCompare(b.firstName)); // Alphabetical Sort
-  }, [employees, selectedTeam, searchTerm, isManager, managedTeam]);
+    }).sort((a, b) => {
+        // Sort by Category first if enabled
+        if (groupByCategory) {
+            const catCompare = a.category.localeCompare(b.category);
+            if (catCompare !== 0) return catCompare;
+        }
+        // Then Alphabetical
+        return a.firstName.localeCompare(b.firstName);
+    });
+  }, [employees, selectedTeam, searchTerm, isManager, managedTeam, groupByCategory]);
 
   // Reset card index and pagination when list changes
   useEffect(() => {
@@ -139,6 +150,129 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
       const str = d.toLocaleDateString(settings.language === 'fr' ? 'fr-FR' : 'en-US', { month: 'short', year: 'numeric' });
       // Capitalize first letter
       return str.charAt(0).toUpperCase() + str.slice(1);
+  };
+
+  // --- Monthly Export Logic ---
+  const handleMonthlyExport = (type: 'pdf' | 'excel') => {
+      setIsExportMenuOpen(false);
+      const filename = `bonus_${selectedMonth}_${new Date().toISOString().slice(0, 10)}`;
+      const monthLabel = formatMonthHeader(selectedMonth);
+      const editionDate = new Date().toLocaleString(settings.language === 'fr' ? 'fr-FR' : 'en-US');
+      const exportedBy = currentUser.name;
+
+      if (type === 'excel') {
+          let tableContent = `
+            <html>
+            <head>
+            <meta charset="UTF-8">
+            <style>
+              table { border-collapse: collapse; width: 100%; font-family: sans-serif; }
+              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+              th { background-color: #f2f2f2; }
+              .meta { font-size: 12px; color: #666; margin-bottom: 10px; }
+              .header { font-size: 18px; font-weight: bold; margin-bottom: 5px; }
+              .category-row { background-color: #e5e7eb; font-weight: bold; }
+            </style>
+            </head>
+            <body>
+              <div class="header">${settings.language === 'fr' ? 'Rapport Mensuel des Primes' : 'Monthly Bonus Report'}</div>
+              <div class="meta">
+                <strong>${settings.language === 'fr' ? 'Mois' : 'Month'}:</strong> ${monthLabel}<br/>
+                <strong>${settings.language === 'fr' ? 'Édité le' : 'Edited on'}:</strong> ${editionDate}<br/>
+                <strong>${settings.language === 'fr' ? 'Par' : 'By'}:</strong> ${exportedBy}
+              </div>
+              <br/>
+              <table>
+                <thead>
+                  <tr>
+                    <th>${settings.language === 'fr' ? 'Employé' : 'Employee'}</th>
+                    <th>${settings.language === 'fr' ? 'Matricule' : 'ID'}</th>
+                    <th>${settings.language === 'fr' ? 'Catégorie' : 'Category'}</th>
+                    <th>${t.score}</th>
+                  </tr>
+                </thead>
+                <tbody>
+          `;
+
+          let lastCategory = '';
+          eligibleEmployees.forEach(emp => {
+              // Header Grouping for Excel
+              if (groupByCategory && emp.category !== lastCategory) {
+                  tableContent += `<tr class="category-row"><td colspan="4">${emp.category}</td></tr>`;
+                  lastCategory = emp.category;
+              }
+
+              const amount = getBonusAmount(emp.id, selectedMonth);
+              tableContent += `
+                <tr>
+                  <td>${emp.firstName} ${emp.lastName}</td>
+                  <td>${emp.matricule}</td>
+                  <td>${emp.category}</td>
+                  <td>${amount}</td>
+                </tr>
+              `;
+          });
+
+          tableContent += `
+                </tbody>
+              </table>
+            </body>
+            </html>
+          `;
+
+          const blob = new Blob([tableContent], { type: 'application/vnd.ms-excel' });
+          const link = document.createElement("a");
+          const url = URL.createObjectURL(blob);
+          link.setAttribute("href", url);
+          link.setAttribute("download", `${filename}.xls`);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+
+      } else {
+          // PDF Export
+          const doc = new jsPDF();
+          
+          // Metadata Header
+          doc.setFontSize(16);
+          doc.text(settings.language === 'fr' ? 'Rapport Mensuel des Primes' : 'Monthly Bonus Report', 14, 15);
+          
+          doc.setFontSize(10);
+          doc.setTextColor(100);
+          doc.text(`${settings.language === 'fr' ? 'Mois concerné' : 'Target Month'}: ${monthLabel}`, 14, 22);
+          doc.text(`${settings.language === 'fr' ? 'Date d\'édition' : 'Edition Date'}: ${editionDate}`, 14, 27);
+          doc.text(`${settings.language === 'fr' ? 'Utilisateur' : 'User'}: ${exportedBy}`, 14, 32);
+
+          const columns = [
+              { header: 'Employee', dataKey: 'name' },
+              { header: 'ID', dataKey: 'matricule' },
+              { header: 'Category', dataKey: 'category' },
+              { header: 'Score', dataKey: 'score' },
+          ];
+
+          const data = eligibleEmployees.map(emp => ({
+              name: `${emp.firstName} ${emp.lastName}`,
+              matricule: emp.matricule,
+              category: emp.category,
+              score: getBonusAmount(emp.id, selectedMonth) || '-'
+          }));
+
+          autoTable(doc, {
+              head: [columns.map(c => c.header)],
+              body: data.map(row => columns.map(c => row[c.dataKey as keyof typeof row])),
+              startY: 38,
+              didDrawPage: (data) => {
+                  // Footer
+                  const pageSize = doc.internal.pageSize;
+                  const pageHeight = pageSize.height ? pageSize.height : pageSize.getHeight();
+                  doc.setFontSize(8);
+                  doc.text(`Page ${data.pageNumber}`, data.settings.margin.left, pageHeight - 10);
+              },
+              // Grouping feature in Autotable is tricky, simpler to sort by category
+              // If groupByCategory is on, we can add a 'drawRow' hook to simulate grouping or just rely on sorting
+          });
+          doc.save(`${filename}.pdf`);
+      }
   };
 
   // PIVOT TABLE LOGIC FOR HISTORY
@@ -215,10 +349,10 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
   const startItem = itemsPerPage === 'all' ? 1 : (currentPage - 1) * (itemsPerPage as number) + 1;
   const endItem = itemsPerPage === 'all' ? totalItems : Math.min(currentPage * (itemsPerPage as number), totalItems);
 
-  // Export Logic
-  const handleExport = async (type: 'pdf' | 'image') => {
+  // History Export Logic
+  const handleHistoryExport = async (type: 'pdf' | 'image') => {
       setIsExportMenuOpen(false);
-      const filename = getExportFilename('bonus');
+      const filename = getExportFilename('bonus_history');
       
       if (type === 'pdf') {
           const doc = new jsPDF('landscape');
@@ -295,6 +429,9 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
 
   const currentEmployee = eligibleEmployees[currentCardIndex];
 
+  // Helper to render table rows with grouping
+  let lastRenderedCategory = '';
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -307,58 +444,107 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
       <div className="grid grid-cols-1 gap-8">
         {/* INPUT SECTION */}
         <div className="space-y-4">
-            <h3 className="text-lg font-bold text-gray-700 flex items-center gap-2">
-                <Award size={20} className="text-blue-600"/> Input Scores
-            </h3>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <h3 className="text-lg font-bold text-gray-700 flex items-center gap-2">
+                    <Award size={20} className="text-blue-600"/> Input Scores
+                </h3>
+                
+                {/* Export Monthly Menu */}
+                <div className="relative">
+                    <button 
+                        onClick={() => setIsExportMenuOpen(!isExportMenuOpen)} 
+                        className="flex items-center gap-2 px-3 py-1.5 bg-white text-gray-700 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors text-sm font-medium shadow-sm"
+                    >
+                        <Download size={16} />
+                        {settings.language === 'fr' ? 'Export Mensuel' : 'Monthly Export'}
+                        <ChevronDown size={14} />
+                    </button>
+                    {isExportMenuOpen && (
+                        <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                            <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500">
+                                {formatMonthHeader(selectedMonth)}
+                            </div>
+                            <button onClick={() => handleMonthlyExport('pdf')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 border-b border-gray-50">
+                                <FileText size={14} /> {settings.language === 'fr' ? 'Rapport PDF' : 'PDF Report'}
+                            </button>
+                            <button onClick={() => handleMonthlyExport('excel')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                                <FileText size={14} /> Excel (.xls)
+                            </button>
+                        </div>
+                    )}
+                    {isExportMenuOpen && (
+                        <div className="fixed inset-0 z-40" onClick={() => setIsExportMenuOpen(false)}></div>
+                    )}
+                </div>
+            </div>
             
-            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col gap-3">
-                 <div className="flex flex-col sm:flex-row gap-2">
-                    <div className="flex-1">
-                        <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Team</label>
-                        <select
-                            value={selectedTeam}
-                            onChange={(e) => setSelectedTeam(e.target.value)}
-                            disabled={isManager}
-                            className={`w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white ${isManager ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                        >
-                        <option value="">{t.select_team}</option>
-                        {teams.map(team => (
-                            <option key={team.id} value={team.id}>{team.name}</option>
-                        ))}
-                        </select>
+            {/* COMPACT FILTERS ROW */}
+            <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
+                 <div className="flex flex-col lg:flex-row gap-3 items-center justify-between">
+                    
+                    {/* Left Group: Team + Search */}
+                    <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto flex-1">
+                        <div className="w-full sm:w-48">
+                            <select
+                                value={selectedTeam}
+                                onChange={(e) => setSelectedTeam(e.target.value)}
+                                disabled={isManager}
+                                className={`w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white text-sm ${isManager ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                            >
+                            <option value="">{t.select_team}</option>
+                            {teams.map(team => (
+                                <option key={team.id} value={team.id}>{team.name}</option>
+                            ))}
+                            </select>
+                        </div>
+                        <div className="flex-1 w-full">
+                            <input 
+                                type="text" 
+                                placeholder={t.filter_name_code}
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-sm"
+                            />
+                        </div>
                     </div>
-                    <div>
-                         <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Month</label>
+
+                    {/* Right Group: Checkbox + Date */}
+                    <div className="flex items-center gap-4 shrink-0 w-full sm:w-auto justify-between sm:justify-end">
+                         <div className="flex items-center gap-2">
+                            <input 
+                                type="checkbox" 
+                                id="groupByCategory"
+                                checked={groupByCategory}
+                                onChange={(e) => setGroupByCategory(e.target.checked)}
+                                className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                            />
+                            <label htmlFor="groupByCategory" className="text-xs text-gray-600 select-none cursor-pointer font-medium flex items-center gap-1">
+                                <Layers size={12} />
+                                {settings.language === 'fr' ? 'Grouper' : 'Group'}
+                            </label>
+                         </div>
+
                          <div className="flex items-center gap-1">
                              <button 
                                 onClick={() => changeSelectedMonth(-1)}
-                                className="p-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
+                                className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded text-gray-600 transition-colors"
                              >
-                                <ChevronLeft size={16} />
+                                <ChevronLeft size={14} />
                              </button>
                              <input 
                                 type="month" 
                                 value={selectedMonth}
                                 onChange={(e) => setSelectedMonth(e.target.value)}
-                                className={`w-full px-3 py-2 rounded-lg border focus:outline-none ${isInputDisabled ? 'border-orange-200 bg-orange-50 text-orange-800' : 'border-gray-200'}`}
+                                className={`px-2 py-1.5 rounded border focus:outline-none text-sm ${isInputDisabled ? 'border-orange-200 bg-orange-50 text-orange-800' : 'border-gray-200'}`}
                             />
                              <button 
                                 onClick={() => changeSelectedMonth(1)}
-                                className="p-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
+                                className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded text-gray-600 transition-colors"
                              >
-                                <ChevronRight size={16} />
+                                <ChevronRight size={14} />
                              </button>
                         </div>
                     </div>
-                 </div>
-                 <div>
-                     <input 
-                        type="text" 
-                        placeholder={t.filter_name_code}
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                    />
                  </div>
             </div>
 
@@ -397,6 +583,9 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
                                 <p className="text-sm text-gray-500 font-mono">
                                     {currentEmployee.matricule}
                                 </p>
+                                <span className="inline-block bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-full">
+                                    {currentEmployee.category}
+                                </span>
                              </div>
 
                              {/* Input */}
@@ -466,29 +655,45 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                         {paginatedInputEmployees.length > 0 ? (
-                        paginatedInputEmployees.map(emp => (
-                            <tr key={emp.id} className="hover:bg-gray-50/50">
-                            <td className="px-6 py-4">
-                                <div className="font-medium text-sm text-gray-900">{emp.firstName} {emp.lastName}</div>
-                                <div className="text-xs text-gray-500">{emp.matricule}</div>
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                                <input 
-                                    type="number" 
-                                    min="0"
-                                    placeholder="0"
-                                    disabled={isInputDisabled}
-                                    className={`w-24 pl-2 pr-2 py-1 border rounded text-right outline-none ${
-                                        isInputDisabled
-                                        ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-200'
-                                        : 'focus:ring-2 focus:ring-green-500/20 focus:border-green-500'
-                                    }`}
-                                    value={getBonusAmount(emp.id, selectedMonth)}
-                                    onChange={(e) => handleScoreChange(emp.id, e.target.value)}
-                                />
-                            </td>
-                            </tr>
-                        ))
+                        paginatedInputEmployees.map(emp => {
+                            const showHeader = groupByCategory && emp.category !== lastRenderedCategory;
+                            if (showHeader) lastRenderedCategory = emp.category;
+
+                            return (
+                                <React.Fragment key={emp.id}>
+                                    {/* Category Header Row */}
+                                    {showHeader && (
+                                        <tr className="bg-gray-50/80 border-b border-gray-100">
+                                            <td colSpan={2} className="px-6 py-2 text-xs font-bold text-gray-700 uppercase tracking-wide">
+                                                {emp.category}
+                                            </td>
+                                        </tr>
+                                    )}
+                                    {/* Employee Row */}
+                                    <tr className="hover:bg-gray-50/50">
+                                        <td className="px-6 py-4">
+                                            <div className="font-medium text-sm text-gray-900">{emp.firstName} {emp.lastName}</div>
+                                            <div className="text-xs text-gray-500 font-mono">{emp.matricule}</div>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <input 
+                                                type="number" 
+                                                min="0"
+                                                placeholder="0"
+                                                disabled={isInputDisabled}
+                                                className={`w-24 pl-2 pr-2 py-1 border rounded text-right outline-none ${
+                                                    isInputDisabled
+                                                    ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-200'
+                                                    : 'focus:ring-2 focus:ring-green-500/20 focus:border-green-500'
+                                                }`}
+                                                value={getBonusAmount(emp.id, selectedMonth)}
+                                                onChange={(e) => handleScoreChange(emp.id, e.target.value)}
+                                            />
+                                        </td>
+                                    </tr>
+                                </React.Fragment>
+                            );
+                        })
                         ) : (
                         <tr>
                             <td colSpan={2} className="px-6 py-12 text-center text-gray-400">
@@ -559,28 +764,15 @@ export const Bonus: React.FC<BonusProps> = ({ employees, teams, bonuses, setting
                     <History size={20} className="text-purple-600"/> {t.history}
                 </h3>
                 
+                 {/* History Export */}
                  <div className="relative">
                      <button 
-                        onClick={() => setIsExportMenuOpen(!isExportMenuOpen)} 
+                        onClick={() => handleHistoryExport('pdf')} 
                         className="flex items-center gap-2 px-3 py-1.5 bg-white text-gray-700 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors text-sm font-medium shadow-sm"
                      >
                         <Download size={16} />
-                        {t.export}
-                        <ChevronDown size={14} />
+                        {t.export} History
                      </button>
-                     {isExportMenuOpen && (
-                       <div className="absolute right-0 mt-2 w-32 bg-white rounded-lg shadow-lg border border-gray-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                          <button onClick={() => handleExport('pdf')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                             <FileText size={14} /> {t.export_pdf}
-                          </button>
-                          <button onClick={() => handleExport('image')} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                             <ImageIcon size={14} /> {t.export_image}
-                          </button>
-                       </div>
-                     )}
-                     {isExportMenuOpen && (
-                        <div className="fixed inset-0 z-40" onClick={() => setIsExportMenuOpen(false)}></div>
-                     )}
                 </div>
             </div>
             

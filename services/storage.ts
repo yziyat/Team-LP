@@ -504,6 +504,23 @@ export const useDataStore = () => {
   };
 
   const addEmployee = async (emp: Omit<Employee, 'id'>) => {
+    // Validation: Alphanumeric check
+    if (!/^[a-zA-Z0-9]+$/.test(emp.matricule)) {
+        notify(settings.language === 'fr' 
+            ? "Erreur : Le matricule ne doit contenir que des lettres et des chiffres." 
+            : "Error: Matricule must contain only letters and numbers.", 'error');
+        return;
+    }
+
+    // Check for duplicate matricule
+    const duplicate = employees.find(e => e.matricule.trim().toLowerCase() === emp.matricule.trim().toLowerCase());
+    if (duplicate) {
+        notify(settings.language === 'fr'
+            ? `Erreur : Un employé avec le matricule "${emp.matricule}" existe déjà.`
+            : `Error: Employee with Matricule "${emp.matricule}" already exists.`, 'error');
+        return;
+    }
+
     const id = Date.now();
     const newEmp = JSON.parse(JSON.stringify({ ...emp, id }));
     
@@ -520,6 +537,27 @@ export const useDataStore = () => {
     const oldEmp = employees.find(e => e.id == id);
     if (!oldEmp) return;
     
+    // Check for matricule constraints if changing
+    if (data.matricule) {
+        // Validation: Alphanumeric check
+        if (!/^[a-zA-Z0-9]+$/.test(data.matricule)) {
+            notify(settings.language === 'fr' 
+                ? "Erreur : Le matricule ne doit contenir que des lettres et des chiffres." 
+                : "Error: Matricule must contain only letters and numbers.", 'error');
+            return;
+        }
+
+        if (data.matricule.trim().toLowerCase() !== oldEmp.matricule.trim().toLowerCase()) {
+            const duplicate = employees.find(e => e.id !== id && e.matricule.trim().toLowerCase() === data.matricule.trim().toLowerCase());
+            if (duplicate) {
+                notify(settings.language === 'fr'
+                    ? `Erreur : Un employé avec le matricule "${data.matricule}" existe déjà.`
+                    : `Error: Employee with Matricule "${data.matricule}" already exists.`, 'error');
+                return;
+            }
+        }
+    }
+
     const diff = getDiff(oldEmp, { ...oldEmp, ...data });
     const docRef = (oldEmp as any)._docId ? doc(db, "employees", (oldEmp as any)._docId) : doc(db, "employees", String(id));
     
