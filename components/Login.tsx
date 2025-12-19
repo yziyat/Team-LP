@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Lock, Mail, Loader2, Users, User } from 'lucide-react';
 import { auth } from '../services/firebase';
 import { setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth';
@@ -17,8 +17,20 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onSignUp, notify }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [rememberMe, setRememberMe] = useState(true);
+  const [rememberMe, setRememberMe] = useState(() => {
+    // Default to true if not specified
+    const stored = localStorage.getItem('team_lp_remember');
+    return stored === null ? true : stored === 'true';
+  });
   const [isLoading, setIsLoading] = useState(false);
+
+  // Load remembered email on mount
+  useEffect(() => {
+    const rememberedEmail = localStorage.getItem('team_lp_email');
+    if (rememberedEmail) {
+      setEmail(rememberedEmail);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,10 +38,19 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onSignUp, notify }) => {
 
     try {
         if (!isSignUp) {
-            // Set persistence before login
+            // CRITICAL: Set persistence BEFORE login
             await setPersistence(auth, rememberMe ? browserLocalPersistence : browserSessionPersistence);
+            
             const success = await onLogin(email, password);
-            if (!success) {
+            if (success) {
+                // Save user preference for email and checkbox
+                localStorage.setItem('team_lp_remember', String(rememberMe));
+                if (rememberMe) {
+                    localStorage.setItem('team_lp_email', email);
+                } else {
+                    localStorage.removeItem('team_lp_email');
+                }
+            } else {
                 setPassword(''); // Clear password on failure
             }
         } else {
@@ -72,7 +93,13 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onSignUp, notify }) => {
 
   const toggleMode = () => {
       setIsSignUp(!isSignUp);
-      setEmail('');
+      // Don't clear email if we are toggling back to login and it was remembered
+      if (isSignUp) {
+          const remembered = localStorage.getItem('team_lp_email');
+          setEmail(remembered || '');
+      } else {
+          setEmail('');
+      }
       setPassword('');
       setConfirmPassword('');
       setFirstName('');
@@ -190,11 +217,11 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onSignUp, notify }) => {
                             id="remember-me"
                             name="remember-me"
                             type="checkbox"
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
                             checked={rememberMe}
                             onChange={(e) => setRememberMe(e.target.checked)}
                         />
-                        <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
+                        <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900 select-none cursor-pointer">
                             Remember me
                         </label>
                     </div>

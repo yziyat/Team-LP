@@ -1,7 +1,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Employee, User, Team, AppSettings, PlanningData, Bonus, AuditLogEntry, Notification, Training } from '../types';
-import { DEFAULT_USERS, DEFAULT_SETTINGS } from '../constants';
+import { DEFAULT_USERS, DEFAULT_SETTINGS, getBrowserLanguage } from '../constants';
 import { db, auth } from './firebase';
 import { 
   collection, 
@@ -58,7 +58,17 @@ export const useDataStore = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  
+  // Initialize settings with localStorage preference if available, else use browser logic
+  const [settings, setSettings] = useState<AppSettings>(() => {
+    const localLang = localStorage.getItem('team_lp_lang');
+    if (localLang === 'fr' || localLang === 'en') {
+        return { ...DEFAULT_SETTINGS, language: localLang as 'fr' | 'en' };
+    }
+    // Fallback to browser language defined in DEFAULT_SETTINGS
+    return DEFAULT_SETTINGS;
+  });
+
   const [planning, setPlanning] = useState<PlanningData>({});
   const [bonuses, setBonuses] = useState<Bonus[]>([]);
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
@@ -142,12 +152,6 @@ export const useDataStore = () => {
               setPermissionError(false);
               setUsersLoading(true);
               hasCleanedLogs.current = false;
-          } else {
-              setPermissionError(false); 
-              if (isSigningUp.current) return;
-              
-              // If admin, trigger maintenance
-              // We check users once they load in the other effect
           }
       });
       return () => unsubscribe();
@@ -265,7 +269,12 @@ export const useDataStore = () => {
     const unsubscribe = onSnapshot(docRef, (docSnap: any) => {
       if (docSnap.exists()) {
         const data = docSnap.data() as AppSettings;
-        setSettings({ ...DEFAULT_SETTINGS, ...data });
+        // Merge with DEFAULT_SETTINGS but respect local override if it exists
+        const localLang = localStorage.getItem('team_lp_lang');
+        const finalLang = (localLang === 'fr' || localLang === 'en') 
+            ? localLang as 'fr' | 'en' 
+            : (data.language || getBrowserLanguage());
+        setSettings({ ...DEFAULT_SETTINGS, ...data, language: finalLang });
       } else {
         setDoc(docRef, DEFAULT_SETTINGS).catch((err: any) => console.log("Init settings failed", err));
         setSettings(DEFAULT_SETTINGS);
@@ -520,6 +529,14 @@ export const useDataStore = () => {
   const updateSettings = async (key: keyof AppSettings, value: any) => {
     try {
       await updateDoc(doc(db, "config", "settings"), { [key]: value });
+      
+      // Personal preference: Save language to localStorage
+      if (key === 'language') {
+        localStorage.setItem('team_lp_lang', value);
+        // Also update local state immediately
+        setSettings(prev => ({ ...prev, language: value }));
+      }
+      
       addLog('UPDATE_SETTINGS', `Changed setting ${key}`);
       notify('Settings updated');
     } catch (e) { handleWriteError(e, "updating settings"); }
@@ -577,7 +594,7 @@ export const useDataStore = () => {
   const deleteUser = async (id: number) => {
     const user = users.find(u => u.id == id);
     if (!user) return;
-    const docId = (user as any)._docId;
+    const docId = (user as any)?._docId;
     try {
       await robustDelete("users", id, docId);
       addLog('DELETE_USER', `Deleted user ${user?.name} (${id})`);

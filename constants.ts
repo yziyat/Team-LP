@@ -7,6 +7,15 @@ export const DEFAULT_USERS: User[] = [
   { id: 3, name: 'Jane Viewer', email: 'jane@ysn.com', role: 'viewer', active: false, emailVerified: true }
 ];
 
+/**
+ * Detects browser language. 
+ * Returns 'fr' if browser is in French, otherwise defaults to 'en'.
+ */
+export const getBrowserLanguage = (): 'fr' | 'en' => {
+  const lang = navigator.language || (navigator as any).userLanguage || 'en';
+  return lang.startsWith('fr') ? 'fr' : 'en';
+};
+
 export const DEFAULT_SETTINGS: AppSettings = {
   categories: ['Manager', 'Employé', 'Stagiaire', 'Contractuel'],
   shifts: [
@@ -25,7 +34,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ],
   holidays: [],
   dateFormat: 'DD/MM/YYYY',
-  language: 'en' // Default to English
+  language: getBrowserLanguage()
 };
 
 export const formatDisplayDate = (dateStr: string | undefined | null, format: string) => {
