@@ -43,7 +43,7 @@ export const formatDisplayDate = (dateStr: string | undefined | null, format: st
   return `${year}-${month}-${day}`;
 };
 
-export const TRANSLATIONS: Record<'fr' | 'en', Record<TranslationKey, string>> = {
+export const TRANSLATIONS: Record<'fr' | 'en', Record<string, string>> = {
   fr: {
     home: 'Accueil',
     dashboard: 'Tableau de bord',
@@ -141,7 +141,9 @@ export const TRANSLATIONS: Record<'fr' | 'en', Record<TranslationKey, string>> =
     verify_email_title: 'Vérifiez votre email',
     verify_email_desc: 'Un email de vérification a été envoyé à',
     resend_email: 'Renvoyer l\'email',
-    email_sent: 'Email envoyé !'
+    email_sent: 'Email envoyé !',
+    group_by_team: 'Grouper par équipe',
+    group_by_category: 'Grouper par catégorie'
   },
   en: {
     home: 'Home',
@@ -240,6 +242,8 @@ export const TRANSLATIONS: Record<'fr' | 'en', Record<TranslationKey, string>> =
     verify_email_title: 'Verify your email',
     verify_email_desc: 'A verification email has been sent to',
     resend_email: 'Resend Email',
-    email_sent: 'Email sent!'
+    email_sent: 'Email sent!',
+    group_by_team: 'Group by team',
+    group_by_category: 'Group by category'
   }
 };

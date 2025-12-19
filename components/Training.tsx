@@ -45,13 +45,17 @@ export const Training: React.FC<TrainingProps> = ({ trainings, teams, employees,
     const [isParticipantsModalOpen, setIsParticipantsModalOpen] = useState(false);
     const [selectedTrainingForParticipants, setSelectedTrainingForParticipants] = useState<TrainingType | null>(null);
     const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<number[]>([]);
+    
+    // Grouping state for participants modal
+    const [groupByTeam, setGroupByTeam] = useState(false);
+    const [groupByCategory, setGroupByCategory] = useState(false);
 
     // Attendance Modal (For Admin in Validated)
     const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
     const [selectedTrainingForAttendance, setSelectedTrainingForAttendance] = useState<TrainingType | null>(null);
     const [presentEmployeeIds, setPresentEmployeeIds] = useState<number[]>([]);
 
-    // Archived Details Modal
+    // Archived/Details Modal
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [detailTraining, setDetailTraining] = useState<TrainingType | null>(null);
 
@@ -254,6 +258,23 @@ export const Training: React.FC<TrainingProps> = ({ trainings, teams, employees,
         });
     };
 
+    const getGroupedAndSortedEmployees = () => {
+        const base = getEligibleEmployees();
+        
+        // Sorting always by Alphabetical Name as base
+        return [...base].sort((a, b) => {
+            if (groupByCategory && a.category !== b.category) {
+                return a.category.localeCompare(b.category);
+            }
+            if (groupByTeam) {
+                const teamA = teams.find(t => t.id === a.teamId)?.name || 'Sans équipe';
+                const teamB = teams.find(t => t.id === b.teamId)?.name || 'Sans équipe';
+                if (teamA !== teamB) return teamA.localeCompare(teamB);
+            }
+            return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
+        });
+    };
+
     // --- Handlers for Attendance ---
     const handleOpenAttendanceModal = (e: React.MouseEvent, tr: TrainingType) => {
         e.stopPropagation();
@@ -290,6 +311,12 @@ export const Training: React.FC<TrainingProps> = ({ trainings, teams, employees,
             setDetailTraining(tr);
             setIsDetailModalOpen(true);
         }
+    };
+
+    const showParticipantsDetails = (e: React.MouseEvent, tr: TrainingType) => {
+        e.stopPropagation();
+        setDetailTraining(tr);
+        setIsDetailModalOpen(true);
     };
 
     const renderStatusBadge = (status: string) => {
@@ -450,6 +477,8 @@ export const Training: React.FC<TrainingProps> = ({ trainings, teams, employees,
         document.body.removeChild(link);
     };
 
+    let lastParticipantGroup = "";
+
     return (
         <div className="space-y-6 animate-in fade-in duration-500 pb-10">
             {/* Header & Controls */}
@@ -532,17 +561,20 @@ export const Training: React.FC<TrainingProps> = ({ trainings, teams, employees,
                                     <div className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded whitespace-nowrap"><Calendar size={14} /><span>{formatDisplayDate(tr.startDate, settings.dateFormat)} → {formatDisplayDate(tr.endDate, settings.dateFormat)}</span></div>
                                     <div className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded whitespace-nowrap"><List size={14} /><span>{formatLabel(tr.sessionCount, t.training_sessions)}</span></div>
                                     
-                                    {/* Conditional Participants Badge */}
+                                    {/* Selectable Participants Badge */}
                                     {tr.status !== 'planned' && (
-                                        <div className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded whitespace-nowrap">
+                                        <button 
+                                            onClick={(e) => showParticipantsDetails(e, tr)}
+                                            className="flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-1 rounded whitespace-nowrap border border-blue-100 hover:bg-blue-100 transition-colors shadow-sm"
+                                        >
                                             <Users size={14} />
-                                            <span>
+                                            <span className="font-semibold">
                                                 {tr.status === 'archived'
                                                     ? formatLabel(tr.participants.filter(p => p.present).length, t.attendees || 'Présents')
                                                     : formatLabel(tr.participants.length, t.training_participants)
                                                 }
                                             </span>
-                                        </div>
+                                        </button>
                                     )}
 
                                     <div className="flex flex-wrap gap-1 items-center">
@@ -762,7 +794,7 @@ export const Training: React.FC<TrainingProps> = ({ trainings, teams, employees,
                 </div>
             )}
 
-            {/* CREATE/EDIT MODAL ... [Existing Modals Code remains same] ... */}
+            {/* CREATE/EDIT MODAL */}
             <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title={editingTraining ? t.edit : t.create}>
                 <form onSubmit={handleFormSubmit} className="space-y-4">
                     <div>
@@ -803,20 +835,63 @@ export const Training: React.FC<TrainingProps> = ({ trainings, teams, employees,
                 </form>
             </Modal>
 
-            {/* PARTICIPANTS MODAL ... [Existing Code] ... */}
+            {/* PARTICIPANTS MODAL */}
             <Modal isOpen={isParticipantsModalOpen} onClose={() => setIsParticipantsModalOpen(false)} title={t.manage_participants} size="lg">
                  <div className="space-y-4">
                      <p className="text-sm text-gray-500">{settings.language === 'fr' ? 'Sélectionnez les employés qui participeront à cette formation.' : 'Select employees who will participate in this training.'}</p>
-                     <div className="max-h-[400px] overflow-y-auto border rounded-lg p-2 bg-gray-50 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                     
+                     <div className="flex flex-wrap gap-4 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                         <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+                             <input 
+                                type="checkbox" 
+                                checked={groupByTeam} 
+                                onChange={(e) => setGroupByTeam(e.target.checked)}
+                                className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                             />
+                             {t.group_by_team}
+                         </label>
+                         <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+                             <input 
+                                type="checkbox" 
+                                checked={groupByCategory} 
+                                onChange={(e) => setGroupByCategory(e.target.checked)}
+                                className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                             />
+                             {t.group_by_category}
+                         </label>
+                     </div>
+
+                     <div className="max-h-[400px] overflow-y-auto border rounded-lg p-2 bg-gray-50">
                          {getEligibleEmployees().length === 0 ? (
-                             <p className="col-span-2 text-center text-gray-400 py-4">No eligible employees found for target teams.</p>
+                             <p className="text-center text-gray-400 py-4">No eligible employees found for target teams.</p>
                          ) : (
-                             getEligibleEmployees().map(emp => (
-                                 <div key={emp.id} onClick={() => toggleParticipant(emp.id)} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${selectedEmployeeIds.includes(emp.id) ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-gray-100 hover:border-gray-200'}`}>
-                                     <div className={`text-blue-600 ${selectedEmployeeIds.includes(emp.id) ? 'opacity-100' : 'opacity-20'}`}>{selectedEmployeeIds.includes(emp.id) ? <CheckSquare size={20} /> : <Square size={20} />}</div>
-                                     <div><p className="font-medium text-sm text-gray-900">{emp.firstName} {emp.lastName}</p><p className="text-xs text-gray-500">{emp.matricule}</p></div>
-                                 </div>
-                             ))
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {getGroupedAndSortedEmployees().map((emp) => {
+                                    const teamName = teams.find(t => t.id === emp.teamId)?.name || 'Sans équipe';
+                                    const groupLabel = (groupByCategory ? emp.category : "") + (groupByCategory && groupByTeam ? " - " : "") + (groupByTeam ? teamName : "");
+                                    
+                                    const showHeader = (groupByCategory || groupByTeam) && groupLabel !== lastParticipantGroup;
+                                    if (showHeader) lastParticipantGroup = groupLabel;
+
+                                    return (
+                                        <React.Fragment key={emp.id}>
+                                            {showHeader && (
+                                                <div className="col-span-1 sm:col-span-2 mt-4 mb-1 first:mt-0">
+                                                    <span className="text-[10px] uppercase tracking-widest font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                                                        {groupLabel}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            <div onClick={() => toggleParticipant(emp.id)} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${selectedEmployeeIds.includes(emp.id) ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-gray-100 hover:border-gray-200'}`}>
+                                                <div className={`text-blue-600 ${selectedEmployeeIds.includes(emp.id) ? 'opacity-100' : 'opacity-20'}`}>{selectedEmployeeIds.includes(emp.id) ? <CheckSquare size={20} /> : <Square size={20} />}</div>
+                                                <div><p className="font-medium text-sm text-gray-900">{emp.firstName} {emp.lastName}</p><p className="text-xs text-gray-500">{emp.matricule}</p></div>
+                                            </div>
+                                        </React.Fragment>
+                                    )
+                                })}
+                                {/* Clear tracker for future renders */}
+                                {(() => { lastParticipantGroup = ""; return null; })()}
+                            </div>
                          )}
                      </div>
                      <div className="flex justify-end gap-3 pt-4 border-t">
@@ -826,7 +901,7 @@ export const Training: React.FC<TrainingProps> = ({ trainings, teams, employees,
                  </div>
             </Modal>
 
-            {/* ATTENDANCE MODAL ... [Existing Code] ... */}
+            {/* ATTENDANCE MODAL */}
             <Modal isOpen={isAttendanceModalOpen} onClose={() => setIsAttendanceModalOpen(false)} title={t.mark_attendance} size="lg">
                 <div className="space-y-4">
                      <p className="text-sm text-gray-500">{settings.language === 'fr' ? 'Cochez les employés qui ont complété la formation.' : 'Check employees who completed the training.'}</p>
@@ -853,29 +928,53 @@ export const Training: React.FC<TrainingProps> = ({ trainings, teams, employees,
                 </div>
             </Modal>
 
-            {/* DETAIL MODAL ... [Existing Code] ... */}
+            {/* DETAIL POPUP MODAL */}
             <Modal isOpen={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} title={detailTraining ? detailTraining.title : 'Details'} size="lg">
                 {detailTraining && (
                     <div className="space-y-4">
                         <div className="flex flex-col gap-2 border-b pb-4">
+                            <div className="flex items-center gap-2">
+                                {renderStatusBadge(detailTraining.status)}
+                                <h3 className="font-bold text-gray-900">{detailTraining.title}</h3>
+                            </div>
                             <p className="text-sm text-gray-600">{detailTraining.description}</p>
-                            <div className="flex gap-4 text-xs text-gray-500">
-                                <span>{formatDisplayDate(detailTraining.startDate, settings.dateFormat)} → {formatDisplayDate(detailTraining.endDate, settings.dateFormat)}</span>
-                                <span>{formatLabel(detailTraining.sessionCount, t.training_sessions)}</span>
+                            <div className="flex flex-wrap gap-4 text-xs text-gray-500">
+                                <div className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded"><Calendar size={14} /><span>{formatDisplayDate(detailTraining.startDate, settings.dateFormat)} → {formatDisplayDate(detailTraining.endDate, settings.dateFormat)}</span></div>
+                                <div className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded"><List size={14} /><span>{formatLabel(detailTraining.sessionCount, t.training_sessions)}</span></div>
+                                <div className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded"><Users size={14} /><span>{formatLabel(detailTraining.participants.length, t.training_participants)}</span></div>
                             </div>
                         </div>
-                        <h4 className="text-sm font-bold text-gray-700 uppercase">{t.training_attendance}</h4>
+                        
+                        <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-bold text-gray-700 uppercase">{t.training_attendance}</h4>
+                            {detailTraining.status === 'archived' && (
+                                <span className="text-xs text-green-600 font-bold bg-green-50 px-2 py-1 rounded border border-green-100">
+                                    {formatLabel(detailTraining.participants.filter(p => p.present).length, t.attendees || 'Présents')}
+                                </span>
+                            )}
+                        </div>
+
                         <div className="max-h-[400px] overflow-y-auto border rounded-lg p-2 bg-gray-50 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                             {detailTraining.participants.map(p => {
-                                 const emp = employees.find(e => e.id === p.employeeId);
-                                 if (!emp) return null;
-                                 return (
-                                    <div key={emp.id} className={`flex items-center gap-3 p-3 rounded-lg border ${p.present ? 'bg-green-50 border-green-200' : 'bg-white border-gray-100'}`}>
-                                        <div className={`text-green-600 ${p.present ? 'opacity-100' : 'opacity-20'}`}>{p.present ? <CheckSquare size={20} /> : <Square size={20} />}</div>
-                                        <div><p className="font-medium text-sm text-gray-900">{emp.firstName} {emp.lastName}</p><p className="text-xs text-gray-500">{emp.matricule}</p></div>
-                                    </div>
-                                 )
-                             })}
+                             {detailTraining.participants.length === 0 ? (
+                                 <p className="col-span-2 text-center py-8 text-gray-400 italic">Aucun participant sélectionné.</p>
+                             ) : (
+                                 detailTraining.participants.map(p => {
+                                    const emp = employees.find(e => e.id === p.employeeId);
+                                    if (!emp) return null;
+                                    const showAttendance = detailTraining.status === 'archived' || detailTraining.status === 'validated';
+                                    return (
+                                        <div key={emp.id} className={`flex items-center gap-3 p-3 rounded-lg border ${showAttendance && p.present ? 'bg-green-50 border-green-200' : 'bg-white border-gray-100'}`}>
+                                            <div className={`text-green-600 ${(showAttendance && p.present) || !showAttendance ? 'opacity-100' : 'opacity-20'}`}>
+                                                {((showAttendance && p.present) || !showAttendance) ? <CheckSquare size={20} /> : <Square size={20} />}
+                                            </div>
+                                            <div>
+                                                <p className="font-medium text-sm text-gray-900">{emp.firstName} {emp.lastName}</p>
+                                                <p className="text-xs text-gray-500">{emp.matricule} • {emp.category}</p>
+                                            </div>
+                                        </div>
+                                    )
+                                 })
+                             )}
                         </div>
                          <div className="flex justify-end pt-4 border-t">
                             <Button type="button" onClick={() => setIsDetailModalOpen(false)}>Close</Button>
@@ -884,7 +983,7 @@ export const Training: React.FC<TrainingProps> = ({ trainings, teams, employees,
                 )}
             </Modal>
 
-            {/* Deletion Confirmation Modal - THIS IS THE CRITICAL PART */}
+            {/* Deletion Confirmation Modal */}
             <Modal
                 isOpen={deleteConfirmation.isOpen}
                 onClose={() => setDeleteConfirmation({ isOpen: false, trId: null })}

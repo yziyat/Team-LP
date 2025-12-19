@@ -1,6 +1,6 @@
 
-import React, { useState, useRef } from 'react';
-import { Search, Plus, Edit2, Trash2, Filter, User, LogOut, ChevronLeft, ChevronRight, Calendar, Download, FileText, Image as ImageIcon, ChevronDown } from 'lucide-react';
+import React, { useState, useRef, useMemo } from 'react';
+import { Search, Plus, Edit2, Trash2, Filter, User, LogOut, ChevronLeft, ChevronRight, Calendar, Download, FileText, Image as ImageIcon, ChevronDown, RotateCcw, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Employee, AppSettings, User as UserType } from '../types';
 import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
@@ -19,13 +19,24 @@ interface EmployeeListProps {
   notify: (message: string, type: 'success' | 'error' | 'info') => void;
 }
 
+type SortKey = 'name' | 'category' | 'assignment' | 'entryDate' | 'status';
+type SortDirection = 'asc' | 'desc' | null;
+
 export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings, currentUser, onAdd, onUpdate, onDelete, notify }) => {
   const t = TRANSLATIONS[settings.language];
   const tableRef = useRef<HTMLDivElement>(null);
+  
+  // Filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   
+  // Sort state - Default alphabetical by name
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({
+    key: 'name',
+    direction: 'asc'
+  });
+
   // Pagination State
   const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(50);
   const [currentPage, setCurrentPage] = useState(1);
@@ -49,34 +60,94 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
     category: '',
     assignment: '',
     isBonusEligible: false,
-    entryDate: '' // New Field
+    entryDate: ''
   });
 
   const isAdmin = currentUser.role === 'admin';
 
-  const filteredEmployees = employees.filter(emp => {
-    const matchesSearch = 
-      emp.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.matricule.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = categoryFilter ? emp.category === categoryFilter : true;
-    return matchesSearch && matchesCategory;
-  });
+  // Sort Handler
+  const handleSort = (key: SortKey) => {
+    let direction: SortDirection = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    } else if (sortConfig.key === key && sortConfig.direction === 'desc') {
+      direction = null; // Reset sort
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const handleResetFilters = () => {
+    setSearchTerm('');
+    setCategoryFilter('');
+    setSortConfig({ key: 'name', direction: 'asc' });
+    setCurrentPage(1);
+  };
+
+  // Processing: Filter -> Sort -> Paginate
+  const filteredAndSortedEmployees = useMemo(() => {
+    // 1. Filter
+    let result = employees.filter(emp => {
+      const matchesSearch = 
+        emp.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        emp.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        emp.matricule.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCategory = categoryFilter ? emp.category === categoryFilter : true;
+      return matchesSearch && matchesCategory;
+    });
+
+    // 2. Sort
+    if (sortConfig.direction) {
+      result.sort((a, b) => {
+        let aVal: any = '';
+        let bVal: any = '';
+
+        switch (sortConfig.key) {
+          case 'name':
+            aVal = `${a.firstName} ${a.lastName}`.toLowerCase();
+            bVal = `${b.firstName} ${b.lastName}`.toLowerCase();
+            break;
+          case 'category':
+            aVal = a.category.toLowerCase();
+            bVal = b.category.toLowerCase();
+            break;
+          case 'assignment':
+            aVal = a.assignment.toLowerCase();
+            bVal = b.assignment.toLowerCase();
+            break;
+          case 'entryDate':
+            aVal = a.entryDate || '0000-00-00';
+            bVal = b.entryDate || '0000-00-00';
+            break;
+          case 'status':
+            // Active first (no exitDate), then Exited
+            aVal = a.exitDate ? 1 : 0;
+            bVal = b.exitDate ? 1 : 0;
+            break;
+        }
+
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return result;
+  }, [employees, searchTerm, categoryFilter, sortConfig]);
 
   // Pagination Logic
-  const totalItems = filteredEmployees.length;
+  const totalItems = filteredAndSortedEmployees.length;
   const totalPages = itemsPerPage === 'all' ? 1 : Math.ceil(totalItems / itemsPerPage);
   
   const paginatedEmployees = itemsPerPage === 'all' 
-    ? filteredEmployees 
-    : filteredEmployees.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+    ? filteredAndSortedEmployees 
+    : filteredAndSortedEmployees.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const startItem = itemsPerPage === 'all' ? 1 : (currentPage - 1) * itemsPerPage + 1;
   const endItem = itemsPerPage === 'all' ? totalItems : Math.min(currentPage * itemsPerPage, totalItems);
 
 
   const handleOpenModal = (emp?: Employee) => {
-    if (!isAdmin) return; // Protection
+    if (!isAdmin) return;
 
     if (emp) {
       setEditingEmployee(emp);
@@ -148,11 +219,9 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
     e.preventDefault();
     if (selectedExitEmployee) {
       if (exitDate) {
-         // Validate against employee's birth and entry date
          const isValid = validateDates(selectedExitEmployee.birthDate, selectedExitEmployee.entryDate || '', exitDate);
          if (!isValid) return;
       }
-      
       onUpdate(selectedExitEmployee.id, { exitDate: exitDate || null });
       setIsExitModalOpen(false);
     }
@@ -161,8 +230,6 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) return;
-    
-    // Validate Dates
     const isValid = validateDates(formData.birthDate, formData.entryDate, null);
     if (!isValid) return;
 
@@ -174,14 +241,11 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
     setIsModalOpen(false);
   };
 
-  // Export Logic
   const handleExport = async (type: 'pdf' | 'excel' | 'image') => {
       setIsExportMenuOpen(false);
       const filename = `employees_${new Date().toISOString().slice(0, 10)}`;
 
       if (type === 'excel') {
-          // EXCEL EXPORT (Using HTML Table approach for best formatting results without heavy libraries)
-          
           let tableContent = `
             <html>
             <head>
@@ -209,7 +273,7 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
                 <tbody>
           `;
 
-          filteredEmployees.forEach(e => {
+          filteredAndSortedEmployees.forEach(e => {
             tableContent += `
               <tr>
                 <td>${e.matricule}</td>
@@ -236,17 +300,15 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
           if (link.download !== undefined) {
               const url = URL.createObjectURL(blob);
               link.setAttribute("href", url);
-              link.setAttribute("download", `${filename}.xls`); // Using .xls for HTML/XML format compatibility
+              link.setAttribute("download", `${filename}.xls`);
               link.style.visibility = 'hidden';
               document.body.appendChild(link);
               link.click();
               document.body.removeChild(link);
           }
-
       } else if (type === 'pdf') {
           const doc = new jsPDF();
           doc.text("Employee List", 14, 15);
-          
           const columns = [
               { header: 'Matricule', dataKey: 'matricule' },
               { header: 'First Name', dataKey: 'firstName' },
@@ -256,8 +318,7 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
               { header: 'Entry', dataKey: 'entryDate' },
               { header: 'Status', dataKey: 'status' }
           ];
-
-          const data = filteredEmployees.map(e => ({
+          const data = filteredAndSortedEmployees.map(e => ({
               matricule: e.matricule,
               firstName: e.firstName,
               lastName: e.lastName,
@@ -266,7 +327,6 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
               entryDate: e.entryDate || '-',
               status: e.exitDate ? `Exit: ${e.exitDate}` : 'Active'
           }));
-
           autoTable(doc, {
               head: [columns.map(c => c.header)],
               body: data.map(row => columns.map(c => row[c.dataKey as keyof typeof row])),
@@ -275,7 +335,6 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
           });
           doc.save(`${filename}.pdf`);
       } else {
-          // Image
           if (!tableRef.current) return;
           try {
               const clone = tableRef.current.cloneNode(true) as HTMLElement;
@@ -286,21 +345,21 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
               clone.style.background = 'white';
               clone.style.zIndex = '9999';
               document.body.appendChild(clone);
-
               const canvas = await html2canvas(clone, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
               document.body.removeChild(clone);
-
               const link = document.createElement('a');
               link.href = canvas.toDataURL('image/png');
               link.download = `${filename}.png`;
               link.click();
-          } catch(e) {
-              notify('Export failed', 'error');
-          }
+          } catch(e) { notify('Export failed', 'error'); }
       }
   };
 
-  // Render Action Buttons
+  const SortIndicator = ({ column }: { column: SortKey }) => {
+    if (sortConfig.key !== column) return <ArrowUpDown size={14} className="text-gray-300" />;
+    return sortConfig.direction === 'asc' ? <ArrowUp size={14} className="text-blue-600" /> : <ArrowDown size={14} className="text-blue-600" />;
+  };
+
   const renderActions = (emp: Employee) => (
     isAdmin && (
       <div className="flex items-center justify-end gap-1">
@@ -325,7 +384,6 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
           <p className="text-gray-500">{settings.language === 'fr' ? 'Gérez votre personnel et leurs informations' : 'Manage your staff and their information'}</p>
         </div>
         <div className="flex gap-2">
-            {/* Export Dropdown */}
             <div className="relative">
                 <button 
                 onClick={() => setIsExportMenuOpen(!isExportMenuOpen)} 
@@ -348,11 +406,8 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
                     </button>
                 </div>
                 )}
-                {isExportMenuOpen && (
-                    <div className="fixed inset-0 z-40" onClick={() => setIsExportMenuOpen(false)}></div>
-                )}
+                {isExportMenuOpen && <div className="fixed inset-0 z-40" onClick={() => setIsExportMenuOpen(false)}></div>}
             </div>
-            
             {isAdmin && (
               <Button onClick={() => handleOpenModal()} icon={Plus}>
               {t.new_employee}
@@ -361,7 +416,6 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
         </div>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-col md:flex-row gap-4 bg-white p-3 rounded-xl border border-gray-200 shadow-sm items-center">
         <div className="flex-1 relative w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
@@ -373,8 +427,8 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
             onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
           />
         </div>
-        <div className="w-full md:w-64 relative">
-          <div className="relative">
+        <div className="w-full md:w-auto flex items-center gap-2">
+          <div className="relative flex-1 md:w-64">
             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
             <select 
               className="w-full pl-9 pr-8 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none bg-white text-sm cursor-pointer"
@@ -386,10 +440,17 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
             </select>
             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
           </div>
+          
+          <button 
+            onClick={handleResetFilters}
+            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+            title={t.reset}
+          >
+            <RotateCcw size={20} />
+          </button>
         </div>
       </div>
 
-      {/* Mobile Card View */}
       <div className="grid grid-cols-1 gap-4 md:hidden">
          {paginatedEmployees.length > 0 ? (
             paginatedEmployees.map(emp => (
@@ -440,18 +501,27 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
          )}
       </div>
 
-      {/* Desktop Table View */}
       <div ref={tableRef} className="hidden md:block bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100 text-xs uppercase text-gray-500 font-semibold tracking-wider">
                 <th className="px-6 py-4">Matricule</th>
-                <th className="px-6 py-4">Name</th>
-                <th className="px-6 py-4">Category</th>
-                <th className="px-6 py-4">Assignment</th>
-                <th className="px-6 py-4">Entry Date</th>
-                <th className="px-6 py-4">Status</th>
+                <th className="px-6 py-4 cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('name')}>
+                  <div className="flex items-center gap-2">Name <SortIndicator column="name" /></div>
+                </th>
+                <th className="px-6 py-4 cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('category')}>
+                  <div className="flex items-center gap-2">Category <SortIndicator column="category" /></div>
+                </th>
+                <th className="px-6 py-4 cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('assignment')}>
+                  <div className="flex items-center gap-2">Assignment <SortIndicator column="assignment" /></div>
+                </th>
+                <th className="px-6 py-4 cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('entryDate')}>
+                  <div className="flex items-center gap-2">Entry Date <SortIndicator column="entryDate" /></div>
+                </th>
+                <th className="px-6 py-4 cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('status')}>
+                  <div className="flex items-center gap-2">Status <SortIndicator column="status" /></div>
+                </th>
                 {isAdmin && <th className="px-6 py-4 text-right">Actions</th>}
               </tr>
             </thead>
@@ -513,7 +583,6 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
           </table>
         </div>
 
-        {/* Pagination Footer */}
         {totalItems > 0 && (
             <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50">
                 <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -564,7 +633,6 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
         )}
       </div>
       
-      {/* Deletion Confirmation Modal */}
       <Modal
         isOpen={deleteConfirmation.isOpen}
         onClose={() => setDeleteConfirmation({ isOpen: false, empId: null })}
@@ -588,7 +656,6 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
           </div>
       </Modal>
 
-      {/* Edit/Create Modal (Restricted) */}
       <Modal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
@@ -664,7 +731,6 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({ employees, settings,
         </form>
       </Modal>
 
-      {/* Exit Date Modal (Restricted) */}
       <Modal
         isOpen={isExitModalOpen}
         onClose={() => setIsExitModalOpen(false)}
