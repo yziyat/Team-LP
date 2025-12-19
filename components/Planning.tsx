@@ -9,13 +9,14 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+// Define the missing PlanningProps interface
 interface PlanningProps {
   employees: Employee[];
   teams: Team[];
   settings: AppSettings;
   planning: PlanningData;
   currentUser: User;
-  onUpdatePlanning: (empId: number, date: string, shift: string | null) => void;
+  onUpdatePlanning: (employeeId: number, dateStr: string, shiftName: string | null) => void;
 }
 
 // Utility to get YYYY-MM-DD in local time to avoid J-1/UTC issues
@@ -411,7 +412,7 @@ export const Planning: React.FC<PlanningProps> = ({ employees, teams, settings, 
                                   {settings.language === 'fr' ? 'Employé' : 'Emp.'}
                                 </th>
                                 {dates.map(date => (
-                                    <th key={toLocalISO(date)} className="p-2 text-center border-b border-gray-200 min-w-[50px] bg-gray-50">
+                                    <th key={toLocalISO(date)} className="p-2 text-center border-b border-gray-200 min-w-[50px] bg-gray-50 sticky top-0 z-20">
                                         <div className="text-[10px] text-gray-400">{date.getDate()}</div>
                                         <div className="text-[9px] text-gray-300">{date.toLocaleDateString(settings.language==='fr'?'fr-FR':'en-US', {weekday:'narrow'})}</div>
                                     </th>
@@ -445,7 +446,7 @@ export const Planning: React.FC<PlanningProps> = ({ employees, teams, settings, 
       <div className="hidden md:flex bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex-1 flex-col min-h-[500px]">
         <div className="overflow-auto flex-1 relative" ref={printRef}>
           <table className="w-full border-collapse table-fixed">
-            <thead className="sticky top-0 z-30">
+            <thead className="z-30">
               <tr className="bg-gray-50">
                 <th className="sticky left-0 top-0 z-40 bg-gray-50 border-r border-b border-gray-200 min-w-[200px] w-[200px] p-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider shadow-[4px_0_12px_-4px_rgba(0,0,0,0.1)]">
                   {settings.language === 'fr' ? 'Employé' : 'Employee'}
@@ -457,7 +458,7 @@ export const Planning: React.FC<PlanningProps> = ({ employees, teams, settings, 
                   const prevDate = index > 0 ? dates[index - 1] : null;
                   const isNewMonth = prevDate && prevDate.getMonth() !== date.getMonth();
                   return (
-                    <th key={dateStr} className={`min-w-[60px] p-2 text-center border-b border-gray-200 border-r border-gray-100 last:border-r-0 ${isNewMonth ? 'border-l-4 border-l-blue-300' : ''} ${holiday ? 'bg-red-50' : isWeekend ? 'bg-slate-50' : 'bg-white'}`}>
+                    <th key={dateStr} className={`sticky top-0 z-20 min-w-[60px] p-2 text-center border-b border-gray-200 border-r border-gray-100 last:border-r-0 ${isNewMonth ? 'border-l-4 border-l-blue-300' : ''} ${holiday ? 'bg-red-50' : isWeekend ? 'bg-slate-50' : 'bg-white'}`}>
                       <div className="flex flex-col items-center justify-center leading-tight">
                         <span className={`text-xs font-bold ${holiday ? 'text-red-600' : 'text-gray-700'}`}>{date.getDate()} {date.toLocaleDateString(settings.language === 'fr' ? 'fr-FR' : 'en-US', { month: 'short' })}</span>
                         <span className={`text-[10px] uppercase font-medium mt-0.5 ${holiday ? 'text-red-500' : 'text-gray-400'}`}>{date.toLocaleDateString(settings.language === 'fr' ? 'fr-FR' : 'en-US', { weekday: 'short' })}</span>
