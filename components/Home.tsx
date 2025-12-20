@@ -10,15 +10,15 @@ interface HomeProps {
   currentUser: User;
 }
 
-const QuickCard = ({ title, icon: Icon, onClick, color }: { title: string, icon: any, onClick: () => void, color: string }) => (
+const QuickCard = ({ title, icon: Icon, onClick, colorClass }: { title: string, icon: any, onClick: () => void, colorClass: string }) => (
   <button 
     onClick={onClick}
-    className={`bg-white p-3 md:p-6 rounded-xl border border-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 group flex flex-col items-center justify-center gap-2 md:gap-4 h-28 md:h-40`}
+    className={`bg-white p-4 md:p-8 rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 group flex flex-col items-center justify-center gap-4 md:gap-6 h-32 md:h-48`}
   >
-    <div className={`p-2 md:p-4 rounded-full ${color} text-white shadow-md group-hover:scale-110 transition-transform`}>
-      <Icon size={24} className="md:w-8 md:h-8" />
+    <div className={`p-3 md:p-5 rounded-2xl border-2 transition-all duration-300 group-hover:scale-110 ${colorClass}`}>
+      <Icon size={28} className="md:w-10 md:h-10 stroke-[1.5]" />
     </div>
-    <span className="font-semibold text-gray-700 text-xs md:text-lg text-center leading-tight">{title}</span>
+    <span className="font-bold text-slate-600 text-[10px] md:text-sm text-center leading-tight uppercase tracking-[0.1em]">{title}</span>
   </button>
 );
 
@@ -27,48 +27,48 @@ export const Home: React.FC<HomeProps> = ({ setTab, lang, currentUser }) => {
   const isAdmin = currentUser.role === 'admin';
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="text-center md:text-left">
-        <h2 className="text-2xl md:text-3xl font-bold text-gray-900">{t.welcome_title}</h2>
-        <p className="text-gray-500 mt-2 text-sm md:text-lg">{t.welcome_subtitle}</p>
+    <div className="space-y-10 animate-in fade-in duration-500 py-4">
+      <div className="text-center md:text-left space-y-2">
+        <h2 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight">{t.welcome_title}</h2>
+        <p className="text-slate-500 text-sm md:text-lg font-medium">{t.welcome_subtitle}</p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-8">
         <QuickCard 
           title={t.dashboard}
           icon={LayoutDashboard}
           onClick={() => setTab('dashboard')}
-          color="bg-indigo-500"
+          colorClass="border-indigo-100 text-indigo-500 group-hover:bg-indigo-50 group-hover:border-indigo-200"
         />
         <QuickCard 
           title={t.planning}
           icon={Calendar}
           onClick={() => setTab('planning')}
-          color="bg-purple-500"
+          colorClass="border-purple-100 text-purple-500 group-hover:bg-purple-50 group-hover:border-purple-200"
         />
         <QuickCard 
           title={t.employees}
           icon={Users}
           onClick={() => setTab('employees')}
-          color="bg-blue-500"
+          colorClass="border-blue-100 text-blue-500 group-hover:bg-blue-50 group-hover:border-blue-200"
         />
         <QuickCard 
           title={t.training}
           icon={GraduationCap}
           onClick={() => setTab('training')}
-          color="bg-teal-500"
+          colorClass="border-teal-100 text-teal-500 group-hover:bg-teal-50 group-hover:border-teal-200"
         />
         <QuickCard 
           title={t.bonus}
           icon={Award}
           onClick={() => setTab('bonus')}
-          color="bg-pink-500"
+          colorClass="border-pink-100 text-pink-500 group-hover:bg-pink-50 group-hover:border-pink-200"
         />
         <QuickCard 
           title={t.settings}
           icon={Settings}
           onClick={() => setTab('settings')}
-          color="bg-orange-500"
+          colorClass="border-orange-100 text-orange-500 group-hover:bg-orange-50 group-hover:border-orange-200"
         />
         
         {/* Admin Only Cards */}
@@ -78,13 +78,13 @@ export const Home: React.FC<HomeProps> = ({ setTab, lang, currentUser }) => {
               title={t.users}
               icon={UserPlus}
               onClick={() => setTab('users')}
-              color="bg-emerald-500"
+              colorClass="border-emerald-100 text-emerald-500 group-hover:bg-emerald-50 group-hover:border-emerald-200"
             />
             <QuickCard 
               title={t.audit}
               icon={ShieldCheck}
               onClick={() => setTab('audit')}
-              color="bg-slate-600"
+              colorClass="border-slate-200 text-slate-600 group-hover:bg-slate-50 group-hover:border-slate-300"
             />
           </>
         )}

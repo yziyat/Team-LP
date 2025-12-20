@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Clock, X, RotateCcw, UserX, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Download, Grid, CalendarDays, FileText, Image as ImageIcon, Search, Filter as FilterIcon, Info, Layers, ChevronDown } from 'lucide-react';
+import { Clock, X, RotateCcw, UserX, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Download, Grid, CalendarDays, FileText, Image as ImageIcon, Search, Filter as FilterIcon, Info, Layers, ChevronDown, Trash2, Zap, Coffee } from 'lucide-react';
 import { Employee, AppSettings, PlanningData, Team, User } from '../types';
 import { Modal } from './ui/Modal';
 import { TRANSLATIONS } from '../constants';
@@ -35,7 +35,7 @@ export const Planning: React.FC<PlanningProps> = ({ employees, teams, settings, 
     d.setDate(d.getDate() - d.getDay() + 1);
     return toLocalISO(d);
   });
-  const [daysToShow, setDaysToShow] = useState(7);
+  const [daysToShow, setDaysToShow] = useState(14);
   const [selectedCell, setSelectedCell] = useState<{empId: number, date: string} | null>(null);
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [teamFilter, setTeamFilter] = useState('');
@@ -175,15 +175,16 @@ export const Planning: React.FC<PlanningProps> = ({ employees, teams, settings, 
           scale: 3, 
           useCORS: true,
           backgroundColor: '#f8fafc',
-          scrollX: -window.scrollX,
-          scrollY: -window.scrollY,
+          scrollX: 0,
+          scrollY: 0,
           windowWidth: target.scrollWidth,
           windowHeight: target.scrollHeight,
           onclone: (clonedDoc) => {
-              const el = clonedDoc.querySelector('.overflow-auto') as HTMLElement;
+              const el = clonedDoc.querySelector('.export-capture-area') as HTMLElement;
               if (el) {
                 el.style.overflow = 'visible';
                 el.style.width = 'fit-content';
+                el.style.height = 'auto';
               }
           }
         });
@@ -243,6 +244,10 @@ export const Planning: React.FC<PlanningProps> = ({ employees, teams, settings, 
     return days;
   }, [mobileMonth]);
 
+  const selectedEmployee = useMemo(() => {
+    return selectedCell ? employees.find(e => e.id === selectedCell.empId) : null;
+  }, [selectedCell, employees]);
+
   return (
     <div className="space-y-4 h-full flex flex-col bg-[#f8fafc]">
       {/* MOBILE HEADER VIEW SELECTOR */}
@@ -255,7 +260,7 @@ export const Planning: React.FC<PlanningProps> = ({ employees, teams, settings, 
           </button>
       </div>
 
-      {/* MOBILE TEAM FILTER BLOCK (SPECIFICALLY FOR MOBILE) */}
+      {/* MOBILE TEAM FILTER BLOCK */}
       <div className="md:hidden bg-white p-3 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-2">
           <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
               <FilterIcon size={18} />
@@ -325,16 +330,16 @@ export const Planning: React.FC<PlanningProps> = ({ employees, teams, settings, 
           </div>
       </div>
 
-      {/* DESKTOP HEADER - OPTIMIZED FOR DYNAMIC WIDTHS */}
-      <div className="hidden md:flex flex-wrap items-center gap-4 mb-2 w-full">
+      {/* DESKTOP HEADER */}
+      <div className="hidden md:flex flex-wrap items-center justify-between gap-4 mb-2 w-full">
         <div className="shrink-0">
           <h2 className="text-xl lg:text-2xl font-black text-[#1e293b] leading-tight">{t.planning}</h2>
           <p className="text-[#64748b] text-[10px] lg:text-xs font-medium">{settings.language === 'fr' ? 'Gestion des shifts' : 'Shift management'}</p>
         </div>
         
-        <div className="flex-1 min-w-0 flex items-center gap-1.5 bg-white px-3 py-2 rounded-2xl border border-gray-200 shadow-sm">
-          {/* Team Filter - Constrained but flexible */}
-          <div className="relative group shrink-1 min-w-[120px] max-w-[200px]">
+        <div className="flex flex-1 min-w-0 items-center gap-1.5 bg-white px-3 py-2 rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          {/* Team Filter */}
+          <div className="relative group shrink-1 min-w-[100px] max-w-[180px]">
             <select 
               value={teamFilter} 
               onChange={(e) => setTeamFilter(e.target.value)} 
@@ -349,8 +354,8 @@ export const Planning: React.FC<PlanningProps> = ({ employees, teams, settings, 
 
           <div className="w-px h-6 bg-gray-100 mx-1 shrink-0" />
 
-          {/* Search - Shrinkable */}
-          <div className="relative flex-1 min-w-[100px] max-w-[250px]">
+          {/* Search */}
+          <div className="relative flex-1 min-w-[80px] max-w-[220px]">
             <input 
               type="text" 
               placeholder={settings.language === 'fr' ? "Employé..." : "Employee..."} 
@@ -373,48 +378,47 @@ export const Planning: React.FC<PlanningProps> = ({ employees, teams, settings, 
           {/* Date Navigation */}
           <div className="flex items-center gap-0.5 shrink-0">
             <button onClick={() => changeDate(-daysToShow)} className="p-1 text-gray-400 hover:text-gray-800 transition-colors rounded-lg hover:bg-gray-100">
-              <ChevronLeft size={18} />
+              <ChevronLeft size={16} />
             </button>
             <div className="relative flex items-center bg-gray-50/80 rounded-xl px-2 border border-transparent hover:border-gray-200 transition-all">
                <input 
                   type="date" 
                   value={startDate} 
                   onChange={(e) => setStartDate(e.target.value)} 
-                  className="bg-transparent border-none py-1.5 text-[10px] lg:text-xs font-black text-gray-700 focus:ring-0 w-24 lg:w-30 cursor-pointer" 
+                  className="bg-transparent border-none py-1.5 text-[10px] lg:text-xs font-black text-gray-700 focus:ring-0 w-24 lg:w-28 cursor-pointer" 
               />
               <CalendarIcon size={12} className="text-gray-400" />
             </div>
             <button onClick={() => changeDate(daysToShow)} className="p-1 text-gray-400 hover:text-gray-800 transition-colors rounded-lg hover:bg-gray-100">
-              <ChevronRight size={18} />
+              <ChevronRight size={16} />
             </button>
           </div>
 
           <div className="w-px h-6 bg-gray-100 mx-1 shrink-0" />
 
-          {/* Days Select */}
-          <div className="relative group shrink-0 min-w-[70px]">
+          {/* Days Select - Fixed to 14/30 only with "jrs" suffix */}
+          <div className="relative group shrink-0 min-w-[75px]">
             <select 
                 value={daysToShow} 
                 onChange={(e) => setDaysToShow(Number(e.target.value))} 
                 className="pl-2 pr-7 py-1.5 bg-transparent border-none text-[11px] lg:text-xs font-bold text-gray-700 focus:ring-0 appearance-none cursor-pointer w-full"
             >
-                <option value={7}>7j</option>
-                <option value={14}>14j</option>
-                <option value={30}>30j</option>
+                <option value={14}>14 jrs</option>
+                <option value={30}>30 jrs</option>
             </select>
             <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none group-hover:text-blue-500 transition-colors" />
           </div>
 
           <div className="w-px h-6 bg-gray-100 mx-1 shrink-0" />
 
-          {/* Export Dropdown - ALWAYS VISIBLE ALIGNED RIGHT */}
-          <div className="relative shrink-0 ml-auto">
+          {/* Export Dropdown */}
+          <div className="relative shrink-0">
             <button 
               onClick={() => setIsExportMenuOpen(!isExportMenuOpen)} 
-              className="flex items-center gap-2 px-3 lg:px-4 py-2 bg-[#eff6ff] text-[#3b82f6] rounded-xl border border-[#dbeafe] hover:bg-[#dbeafe] transition-all text-[11px] lg:text-xs font-black shadow-sm whitespace-nowrap"
+              className="flex items-center gap-2 px-3 py-2 bg-[#eff6ff] text-[#3b82f6] rounded-xl border border-[#dbeafe] hover:bg-[#dbeafe] transition-all text-[11px] lg:text-xs font-black shadow-sm whitespace-nowrap"
             >
               <Download size={16} />
-              <span className="hidden lg:inline">{t.export}</span>
+              <span className="hidden xl:inline">{t.export}</span>
               <ChevronDown size={14} className={`transition-transform duration-200 ${isExportMenuOpen ? 'rotate-180' : ''}`} />
             </button>
             {isExportMenuOpen && (
@@ -434,78 +438,81 @@ export const Planning: React.FC<PlanningProps> = ({ employees, teams, settings, 
         </div>
       </div>
 
-      {/* MOBILE GRID VIEW */}
+      {/* MOBILE GRID VIEW - EXPANDABLE VERTICALLY FOR OUTER SCROLL */}
       {mobileView === 'grid' && (
-        <div className="md:hidden space-y-4 flex flex-col flex-1 animate-in fade-in duration-300">
-            <div className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between gap-1">
+        <div className="md:hidden space-y-4 animate-in fade-in duration-300">
+            {/* Centered navigation controls */}
+            <div className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-center gap-4 sticky top-0 z-40">
                 <button onClick={() => changeDate(-daysToShow)} className="p-1 text-gray-400 hover:text-gray-800 transition-colors"><ChevronLeft size={24} /></button>
                 
-                <div className="flex-1 flex items-center gap-1 bg-gray-50 rounded-xl px-2">
-                   <div className="relative flex-1">
+                <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-4 py-1 border border-gray-100">
+                   <div className="relative">
                         <input 
                             type="date" 
                             value={startDate} 
                             onChange={(e) => setStartDate(e.target.value)} 
-                            className="w-full bg-transparent border-none py-2.5 text-[11px] font-bold text-gray-700 focus:ring-0 min-w-0" 
+                            className="bg-transparent border-none py-2 text-[12px] font-bold text-gray-900 focus:ring-0 w-28" 
                         />
                    </div>
                    <div className="w-px h-6 bg-gray-200" />
-                   {/* DAYS SELECT NEXT TO DATE */}
-                   <div className="relative w-16">
+                   <div className="relative">
                         <select 
                             value={daysToShow} 
                             onChange={(e) => setDaysToShow(Number(e.target.value))} 
-                            className="w-full pl-1 pr-4 py-2.5 bg-transparent border-none text-[11px] font-black text-blue-600 focus:ring-0 appearance-none cursor-pointer"
+                            className="pl-1 pr-5 py-2 bg-transparent border-none text-[12px] font-black text-gray-900 focus:ring-0 appearance-none cursor-pointer"
                         >
-                            <option value={7}>7j</option>
-                            <option value={14}>14j</option>
+                            <option value={7}>7 jrs</option>
+                            <option value={14}>14 jrs</option>
                         </select>
-                        <ChevronDown size={10} className="absolute right-0 top-1/2 -translate-y-1/2 text-blue-400 pointer-events-none" />
+                        <ChevronDown size={12} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                    </div>
                 </div>
 
                 <button onClick={() => changeDate(daysToShow)} className="p-1 text-gray-400 hover:text-gray-800 transition-colors"><ChevronRight size={24} /></button>
             </div>
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex-1 relative min-h-[400px]">
-                <div className="overflow-auto h-full touch-pan-x" ref={printRef}>
-                    <table className="w-full border-separate border-spacing-0">
-                        <thead className="sticky top-0 z-20">
-                            <tr className="bg-white">
-                                <th className="sticky left-0 z-30 bg-white border-r border-b border-gray-100 p-3 text-left text-[10px] font-black text-gray-400 uppercase min-w-[120px] w-[120px] shadow-[2px_0_5px_rgba(0,0,0,0.02)] h-14">EMPLOYÉ</th>
-                                {dates.map((date) => {
-                                    const dateStr = toLocalISO(date);
-                                    const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-                                    const holiday = settings.holidays.find(h => h.date === dateStr);
-                                    return (
-                                        <th key={dateStr} className={`border-b border-r border-gray-50 p-1 text-center min-w-[48px] w-[48px] h-14 ${holiday ? 'bg-red-50' : isWeekend ? 'bg-gray-50' : 'bg-white'}`}>
-                                            <div className="flex flex-col items-center justify-center leading-none">
-                                                <span className={`text-[11px] font-black ${holiday ? 'text-red-600' : 'text-[#64748b]'}`}>{date.getDate()}</span>
-                                                <span className={`text-[8px] font-bold mt-1 uppercase ${holiday ? 'text-red-400' : 'text-gray-300'}`}>{date.toLocaleDateString(settings.language === 'fr' ? 'fr-FR' : 'en-US', { weekday: 'short' })[0].toUpperCase()}</span>
-                                            </div>
-                                        </th>
-                                    );
-                                })}
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                            {filteredEmployees.map(emp => (
-                                <tr key={emp.id} className="hover:bg-gray-50/50">
-                                    <td className="sticky left-0 z-10 bg-white border-r border-b border-gray-50 p-3 shadow-[2px_0_5px_rgba(0,0,0,0.02)] h-14 min-w-[120px] w-[120px]">
-                                        <div className="font-bold text-[10px] text-gray-800 truncate leading-tight uppercase">{emp.firstName} {emp.lastName}</div>
-                                        <div className="text-[8px] text-gray-400 font-mono researcher leading-none mt-1 tracking-widest">{emp.matricule}</div>
-                                    </td>
+            
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden relative">
+                <div className="overflow-x-auto touch-auto scrollbar-hide" ref={printRef}>
+                    <div className="export-capture-area">
+                        <table className="w-full border-separate border-spacing-0">
+                            <thead className="sticky top-0 z-30">
+                                <tr className="bg-white/95 backdrop-blur-sm">
+                                    <th className="sticky left-0 z-40 bg-white border-r border-b border-gray-100 p-3 text-left text-[10px] font-black text-gray-400 uppercase min-w-[120px] w-[120px] shadow-[2px_0_5px_rgba(0,0,0,0.02)] h-14">EMPLOYÉ</th>
                                     {dates.map((date) => {
                                         const dateStr = toLocalISO(date);
+                                        const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+                                        const holiday = settings.holidays.find(h => h.date === dateStr);
                                         return (
-                                            <td key={dateStr} onClick={() => setSelectedCell({ empId: emp.id, date: dateStr })} className="border-r border-b border-gray-50 p-1 cursor-pointer transition-colors hover:bg-gray-50 h-14 min-w-[48px] w-[48px]">
-                                                {renderCellContent(emp.id, dateStr)}
-                                            </td>
+                                            <th key={dateStr} className={`border-b border-r border-gray-50 p-1 text-center min-w-[48px] w-[48px] h-14 ${holiday ? 'bg-red-50' : isWeekend ? 'bg-gray-50' : 'bg-white'}`}>
+                                                <div className="flex flex-col items-center justify-center leading-none">
+                                                    <span className={`text-[11px] font-black ${holiday ? 'text-red-600' : 'text-[#64748b]'}`}>{date.getDate()}</span>
+                                                    <span className={`text-[8px] font-bold mt-1 uppercase ${holiday ? 'text-red-400' : 'text-gray-300'}`}>{date.toLocaleDateString(settings.language === 'fr' ? 'fr-FR' : 'en-US', { weekday: 'short' })[0].toUpperCase()}</span>
+                                                </div>
+                                            </th>
                                         );
                                     })}
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                                {filteredEmployees.map(emp => (
+                                    <tr key={emp.id} className="hover:bg-gray-50/50 transition-colors">
+                                        <td className="sticky left-0 z-20 bg-white border-r border-b border-gray-50 p-3 shadow-[2px_0_5px_rgba(0,0,0,0.02)] h-14 min-w-[120px] w-[120px]">
+                                            <div className="font-bold text-[10px] text-gray-800 truncate leading-tight uppercase">{emp.firstName} {emp.lastName}</div>
+                                            <div className="text-[8px] text-gray-400 font-mono leading-none mt-1 tracking-widest">{emp.matricule}</div>
+                                        </td>
+                                        {dates.map((date) => {
+                                            const dateStr = toLocalISO(date);
+                                            return (
+                                                <td key={dateStr} onClick={() => setSelectedCell({ empId: emp.id, date: dateStr })} className="border-r border-b border-gray-50 p-1 cursor-pointer transition-colors hover:bg-gray-50 h-14 min-w-[48px] w-[48px]">
+                                                    {renderCellContent(emp.id, dateStr)}
+                                                </td>
+                                            );
+                                        })}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -513,7 +520,7 @@ export const Planning: React.FC<PlanningProps> = ({ employees, teams, settings, 
 
       {/* MOBILE CALENDAR VIEW */}
       {mobileView === 'calendar' && (
-        <div className="md:hidden space-y-4 flex flex-col flex-1 animate-in fade-in duration-300">
+        <div className="md:hidden space-y-4 animate-in fade-in duration-300">
            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4">
               <div className="relative">
                 <select value={mobileSelectedEmpId || ''} onChange={(e) => setMobileSelectedEmpId(Number(e.target.value))} className="w-full p-3 border border-gray-100 rounded-xl text-sm bg-gray-50 font-bold text-gray-800 appearance-none">
@@ -547,74 +554,128 @@ export const Planning: React.FC<PlanningProps> = ({ employees, teams, settings, 
         </div>
       )}
 
-      {/* DESKTOP TABLE */}
-      <div className="hidden md:block bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex-1 relative">
-        <div className="overflow-auto h-full" ref={printRef}>
-          <table className="w-full border-separate border-spacing-0">
-            <thead className="sticky top-0 z-20">
-              <tr className="bg-gray-50/80 backdrop-blur-md">
-                <th className="sticky left-0 z-30 bg-gray-50 border-r border-b border-gray-200 p-4 text-left text-[11px] font-black text-gray-400 uppercase min-w-[150px] w-[150px] shadow-[2px_0_10px_rgba(0,0,0,0.03)] h-16">Employé</th>
-                {dates.map((date) => {
-                  const dateStr = toLocalISO(date);
-                  const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-                  const holiday = settings.holidays.find(h => h.date === dateStr);
-                  const monthStr = date.toLocaleDateString(settings.language === 'fr' ? 'fr-FR' : 'en-US', { month: 'short' });
-                  return (
-                    <th key={dateStr} className={`border-b border-r border-gray-200 p-1 text-center min-w-[54px] w-[54px] h-16 ${holiday ? 'bg-red-50/50' : isWeekend ? 'bg-gray-100/50' : 'bg-white'}`}>
-                      <div className="flex flex-col items-center leading-tight">
-                        <span className={`text-xs font-black whitespace-nowrap ${holiday ? 'text-red-600' : 'text-gray-700'}`}>{date.getDate()} {monthStr.replace('.', '')}.</span>
-                        <span className={`text-[9px] font-bold mt-1 uppercase tracking-wider ${holiday ? 'text-red-500' : 'text-gray-400'}`}>{date.toLocaleDateString(settings.language === 'fr' ? 'fr-FR' : 'en-US', { weekday: 'short' }).replace('.', '')}</span>
-                      </div>
-                    </th>
-                  );
-                })}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredEmployees.map(emp => (
-                <tr key={emp.id} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="sticky left-0 z-10 bg-white border-r border-b border-gray-200 p-4 shadow-[2px_0_10px_rgba(0,0,0,0.03)] h-14 min-w-[150px] w-[150px]">
-                    <div className="font-bold text-xs text-[#1e293b] truncate leading-tight uppercase">{emp.firstName} {emp.lastName}</div>
-                    <div className="text-[9px] text-gray-400 font-mono leading-none mt-1.5 tracking-widest">{emp.matricule}</div>
-                  </td>
+      {/* DESKTOP TABLE - REMOVED FIXED HEIGHT TO ENABLE OUTER SCROLLING */}
+      <div className="hidden md:block bg-white rounded-2xl border border-gray-200 shadow-sm relative">
+        <div className="overflow-x-auto touch-auto" ref={printRef}>
+          <div className="export-capture-area">
+            <table className="w-full border-separate border-spacing-0">
+              <thead className="sticky top-0 z-30">
+                <tr className="bg-gray-50/95 backdrop-blur-sm">
+                  <th className="sticky left-0 z-40 bg-gray-50 border-r border-b border-gray-200 p-4 text-left text-[11px] font-black text-gray-400 uppercase min-w-[150px] w-[150px] shadow-[2px_0_10px_rgba(0,0,0,0.03)] h-16">Employé</th>
                   {dates.map((date) => {
                     const dateStr = toLocalISO(date);
+                    const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+                    const holiday = settings.holidays.find(h => h.date === dateStr);
+                    const monthStr = date.toLocaleDateString(settings.language === 'fr' ? 'fr-FR' : 'en-US', { month: 'short' });
                     return (
-                      <td key={dateStr} onClick={() => setSelectedCell({ empId: emp.id, date: dateStr })} className="border-r border-b border-gray-100 p-1.5 cursor-pointer transition-all hover:bg-blue-50/50 h-14 min-w-[54px] w-[54px]">
-                         {renderCellContent(emp.id, dateStr)}
-                      </td>
+                      <th key={dateStr} className={`border-b border-r border-gray-200 p-1 text-center min-w-[54px] w-[54px] h-16 ${holiday ? 'bg-red-50/50' : isWeekend ? 'bg-gray-100/50' : 'bg-white'}`}>
+                        <div className="flex flex-col items-center leading-tight">
+                          <span className={`text-xs font-black whitespace-nowrap ${holiday ? 'text-red-600' : 'text-gray-700'}`}>{date.getDate()} {monthStr.replace('.', '')}.</span>
+                          <span className={`text-[9px] font-bold mt-1 uppercase tracking-wider ${holiday ? 'text-red-500' : 'text-gray-400'}`}>{date.toLocaleDateString(settings.language === 'fr' ? 'fr-FR' : 'en-US', { weekday: 'short' }).replace('.', '')}</span>
+                        </div>
+                      </th>
                     );
                   })}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredEmployees.map(emp => (
+                  <tr key={emp.id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="sticky left-0 z-20 bg-white border-r border-b border-gray-200 p-4 shadow-[2px_0_10px_rgba(0,0,0,0.03)] h-14 min-w-[150px] w-[150px]">
+                      <div className="font-bold text-xs text-[#1e293b] truncate leading-tight uppercase">{emp.firstName} {emp.lastName}</div>
+                      <div className="text-[9px] text-gray-400 font-mono leading-none mt-1.5 tracking-widest">{emp.matricule}</div>
+                    </td>
+                    {dates.map((date) => {
+                      const dateStr = toLocalISO(date);
+                      return (
+                        <td key={dateStr} onClick={() => setSelectedCell({ empId: emp.id, date: dateStr })} className="border-r border-b border-gray-100 p-1.5 cursor-pointer transition-all hover:bg-blue-50/50 h-14 min-w-[54px] w-[54px]">
+                           {renderCellContent(emp.id, dateStr)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
-      {/* ASSIGNMENT MODAL */}
-      <Modal isOpen={!!selectedCell} onClose={() => setSelectedCell(null)} title={selectedCell ? `Assigner à: ${employees.find(e => e.id === selectedCell.empId)?.firstName} ${employees.find(e => e.id === selectedCell.empId)?.lastName}` : ''} size="sm">
-        <div className="space-y-6">
-          <p className="text-sm text-gray-500 text-center font-semibold capitalize">{selectedCell && formatModalDate(selectedCell.date)}</p>
-          <div className="max-h-[500px] overflow-y-auto pr-1 space-y-6">
-             <button onClick={() => handleShiftSelect(null)} className="w-full p-3 rounded-xl border border-red-100 bg-red-50 text-red-600 font-bold hover:bg-red-100 flex items-center justify-center gap-2 transition-colors"><X size={18} /> Effacer</button>
-             <section className="space-y-3">
-                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">SHIFTS</h4>
-                <div className="space-y-2">
+      {/* ASSIGNMENT MODAL - COMPACT VIEW SANS DÉFILEMENT */}
+      <Modal 
+        isOpen={!!selectedCell} 
+        onClose={() => setSelectedCell(null)} 
+        title={selectedEmployee ? `${selectedEmployee.firstName} ${selectedEmployee.lastName}` : ''} 
+        size="md"
+      >
+        <div className="space-y-3">
+          {/* Header Info - Ultra Compact */}
+          <div className="flex items-center justify-between p-2 bg-blue-50/50 rounded-lg border border-blue-100 shadow-sm">
+             <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center text-blue-600 shadow-sm border border-blue-100 shrink-0">
+                    <CalendarDays size={16} />
+                </div>
+                <div className="text-left leading-tight">
+                    <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-0.5">Date</p>
+                    <p className="text-[10px] sm:text-xs font-black text-blue-900 capitalize">
+                        {selectedCell && formatModalDate(selectedCell.date)}
+                    </p>
+                </div>
+             </div>
+             
+             <button 
+                onClick={() => handleShiftSelect(null)} 
+                className="px-3 py-1.5 rounded-lg border-2 border-red-50 bg-white text-red-600 hover:bg-red-50 transition-all active:scale-95 shadow-sm flex items-center gap-1.5"
+             >
+                <Trash2 size={14} /> 
+                <span className="text-[9px] font-black uppercase tracking-widest">Effacer</span>
+             </button>
+          </div>
+
+          <div className="space-y-4">
+             {/* SHIFTS SECTION - Optimized 3 columns */}
+             <section className="space-y-2">
+                <div className="flex items-center gap-1.5 pl-1 border-l-3 border-blue-500 py-0">
+                    <Zap size={14} className="text-blue-500" />
+                    <h4 className="text-[9px] font-black text-slate-800 uppercase tracking-widest">Shifts</h4>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {settings.shifts.map(shift => (
-                    <button key={shift.name} onClick={() => handleShiftSelect(shift.name)} className="w-full p-3 rounded-xl border border-gray-100 flex items-center justify-between hover:shadow-md transition-all bg-white text-left" style={{ borderLeft: `4px solid ${shift.color}` }}>
-                        <span className="font-bold text-gray-800 text-sm">{shift.name}</span>
-                        <div className="flex items-center gap-1.5 text-[10px] text-gray-400 font-medium"><Clock size={12} />{shift.start} - {shift.end}</div>
+                    <button 
+                        key={shift.name} 
+                        onClick={() => handleShiftSelect(shift.name)} 
+                        className="group flex flex-col p-2 rounded-lg border-2 border-slate-100 bg-white hover:border-blue-200 hover:shadow-sm transition-all text-left active:scale-95"
+                    >
+                        <div className="flex items-center gap-1.5 mb-1">
+                            <div className="w-0.5 h-4 rounded-full" style={{ backgroundColor: shift.color }} />
+                            <span className="font-black text-slate-900 text-[10px] truncate">{shift.name}</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-[8px] text-slate-400 font-bold pl-2">
+                            <Clock size={8} />
+                            {shift.start} - {shift.end}
+                        </div>
                     </button>
                     ))}
                 </div>
              </section>
-             <section className="space-y-3">
-                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">ABSENCES</h4>
-                <div className="grid grid-cols-2 gap-2">
+
+             {/* ABSENCES SECTION - Optimized 4 columns */}
+             <section className="space-y-2">
+                <div className="flex items-center gap-1.5 pl-1 border-l-3 border-orange-500 py-0">
+                    <Coffee size={14} className="text-orange-500" />
+                    <h4 className="text-[9px] font-black text-slate-800 uppercase tracking-widest">Absences</h4>
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                     {settings.absenceTypes.map(type => (
-                    <button key={type.name} onClick={() => handleShiftSelect(type.name)} className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border transition-all text-center group" style={{ backgroundColor: `${type.color}10`, borderColor: `${type.color}20`, color: type.color }}>
-                        <UserX size={18} className="opacity-80" /><span className="text-xs font-bold">{type.name}</span>
+                    <button 
+                        key={type.name} 
+                        onClick={() => handleShiftSelect(type.name)} 
+                        className="group flex flex-col items-center justify-center gap-1 p-1.5 rounded-lg border-2 border-slate-50 bg-slate-50/20 hover:bg-white hover:border-orange-200 hover:shadow-sm transition-all text-center active:scale-95"
+                    >
+                        <div className="p-1 rounded-md transition-all group-hover:scale-105" style={{ backgroundColor: `${type.color}15`, color: type.color }}>
+                            <UserX size={14} className="opacity-90" />
+                        </div>
+                        <span className="text-[8px] font-black text-slate-700 truncate w-full px-1">{type.name}</span>
                     </button>
                     ))}
                 </div>
