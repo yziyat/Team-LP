@@ -49,10 +49,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ employees, teams, planning
     return planning[`${empId}_${selectedDate}`];
   };
 
+  // Centralized Holiday Check
+  const holidayToday = useMemo(() => {
+    return settings.holidays.find(h => {
+        if (h.type === 'civil') {
+            return h.date.slice(5) === selectedDate.slice(5);
+        }
+        return h.date === selectedDate;
+    });
+  }, [settings.holidays, selectedDate]);
+
   // 1. GLOBAL COUNTS
   const presentEmployees = activeEmployees.filter(emp => {
     const shift = getEmployeeStatus(emp.id);
     const isAbsent = settings.absenceTypes.some(a => a.name === shift) || shift === 'Repos';
+    // If it's a holiday and no specific shift is assigned, they are not "Present"
     return shift && !isAbsent;
   });
   
@@ -77,14 +88,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ employees, teams, planning
   const absenceConfig = settings.absenceTypes;
 
   // 3. CHARTS DATA
-  // Category Distribution
   const categoryCounts = activeEmployees.reduce((acc, emp) => {
     acc[emp.category] = (acc[emp.category] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
   const categoryChartData = Object.entries(categoryCounts).map(([name, value]) => ({ name, value }));
 
-  // Assignment Distribution
   const assignmentCounts = activeEmployees.reduce((acc, emp) => {
       const assign = emp.assignment || 'Unassigned';
       acc[assign] = (acc[assign] || 0) + 1;
@@ -92,7 +101,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ employees, teams, planning
   }, {} as Record<string, number>);
   const assignmentChartData = Object.entries(assignmentCounts).map(([name, value]) => ({ name, value }));
 
-  // 4. TEAM RECAP DATA (Detailed)
+  // 4. TEAM RECAP DATA
   const teamStats = teams.map(team => {
       const members = employees.filter(e => e.teamId === team.id && !e.exitDate);
       const total = members.length;
@@ -106,7 +115,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ employees, teams, planning
           if (shiftName && shiftsDistribution.hasOwnProperty(shiftName)) {
               shiftsDistribution[shiftName]++;
           } else {
-              othersCount++; // Absent, Rest, Unassigned or Unknown Shift
+              othersCount++; 
           }
       });
 
@@ -116,7 +125,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ employees, teams, planning
           total,
           shiftsDistribution,
           othersCount,
-          members // Pass full members list to allow filtering on click
+          members 
       };
   });
 
@@ -131,7 +140,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ employees, teams, planning
       {/* HEADER & DATE PICKER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800">{t.dashboard}</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-2xl font-bold text-gray-800">{t.dashboard}</h2>
+            {holidayToday && (
+              <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] font-black uppercase rounded-full animate-pulse border border-red-200">
+                {holidayToday.name}
+              </span>
+            )}
+          </div>
           <p className="text-gray-500">{lang === 'fr' ? 'Vue d\'ensemble et statistiques' : 'Overview and statistics'}</p>
         </div>
         
@@ -183,7 +199,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ employees, teams, planning
 
       {/* SHIFT & ABSENCE BREAKDOWN */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Shifts */}
           <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
              <h3 className="text-sm font-bold text-gray-700 uppercase mb-4 flex items-center gap-2">
                  <Clock size={16} className="text-blue-500" />
@@ -209,14 +224,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ employees, teams, planning
              </div>
           </div>
 
-          {/* Absences */}
           <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
              <h3 className="text-sm font-bold text-gray-700 uppercase mb-4 flex items-center gap-2">
                  <UserX size={16} className="text-orange-500" />
                  {lang === 'fr' ? 'Absences & Repos' : 'Absences & Rest'}
              </h3>
              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                 {/* Standard Absence Types */}
                  {absenceConfig.map(abs => {
                      const list = shiftCounts[abs.name] || [];
                      return (
@@ -233,14 +246,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ employees, teams, planning
                          </div>
                      )
                  })}
-                 {/* Special handling for 'Férié' if not in config */}
              </div>
           </div>
       </div>
 
       {/* CHARTS ROW */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Category Chart */}
             <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm h-80 flex flex-col">
                 <h3 className="text-sm font-bold text-gray-700 uppercase mb-4 flex items-center gap-2">
                     <Briefcase size={16} className="text-gray-500"/>
@@ -263,7 +274,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ employees, teams, planning
                 </div>
             </div>
 
-             {/* Assignment Chart */}
              <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm h-80 flex flex-col">
                 <h3 className="text-sm font-bold text-gray-700 uppercase mb-4 flex items-center gap-2">
                     <MapPin size={16} className="text-gray-500"/>
@@ -319,7 +329,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ employees, teams, planning
                      </thead>
                      <tbody className="divide-y divide-gray-100 text-sm">
                          {teamStats.map(stat => {
-                            // Filter functions for click handlers
                             const getShiftMembers = (shiftName: string) => stat.members.filter(m => getEmployeeStatus(m.id) === shiftName);
                             const getOtherMembers = () => stat.members.filter(m => {
                                 const st = getEmployeeStatus(m.id);
@@ -329,16 +338,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ employees, teams, planning
                             return (
                              <tr key={stat.id} className="hover:bg-gray-50 transition-colors group">
                                  <td className="px-6 py-4 font-medium text-gray-800">{stat.name}</td>
-                                 
-                                 {/* Total Count - Clickable */}
                                  <td 
                                     className="px-4 py-4 text-center font-bold text-gray-900 border-l border-gray-100 bg-gray-50/50 cursor-pointer hover:bg-blue-50 hover:text-blue-600 transition-colors"
                                     onClick={() => openListModal(`${stat.name} - Total`, stat.members)}
                                  >
                                     {stat.total}
                                  </td>
-                                 
-                                 {/* Shift Counts - Clickable */}
                                  {settings.shifts.map(s => {
                                      const count = stat.shiftsDistribution[s.name];
                                      return (
@@ -353,8 +358,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ employees, teams, planning
                                          </td>
                                      );
                                  })}
-                                 
-                                 {/* Others Count - Clickable */}
                                  <td 
                                     className={`px-4 py-4 text-center font-medium text-orange-500 border-l border-gray-100 bg-orange-50/10 ${stat.othersCount > 0 ? 'cursor-pointer hover:bg-orange-100 hover:font-bold' : 'opacity-50'}`}
                                     onClick={() => {

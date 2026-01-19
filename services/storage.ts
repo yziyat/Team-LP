@@ -59,13 +59,11 @@ export const useDataStore = () => {
   const [teams, setTeams] = useState<Team[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   
-  // Initialize settings with localStorage preference if available, else use browser logic
   const [settings, setSettings] = useState<AppSettings>(() => {
     const localLang = localStorage.getItem('team_lp_lang');
     if (localLang === 'fr' || localLang === 'en') {
         return { ...DEFAULT_SETTINGS, language: localLang as 'fr' | 'en' };
     }
-    // Fallback to browser language defined in DEFAULT_SETTINGS
     return DEFAULT_SETTINGS;
   });
 
@@ -76,10 +74,10 @@ export const useDataStore = () => {
   
   const [notifications, setNotifications] = useState<Notification[]>([]);
   
-  // Auth & Loading State
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [usersLoading, setUsersLoading] = useState(true);
+  const [settingsLoading, setSettingsLoading] = useState(true);
   const [permissionError, setPermissionError] = useState(false);
 
   const isSigningUp = useRef(false);
@@ -93,24 +91,19 @@ export const useDataStore = () => {
     }, 4000);
   };
 
-  // --- Maintenance: Cleanup Old Logs ---
   const cleanupOldLogs = async () => {
     if (hasCleanedLogs.current) return;
-    
     try {
       const twoMonthsAgo = new Date();
       twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
       const isoThreshold = twoMonthsAgo.toISOString();
-
       const logsRef = collection(db, "audit_logs");
       const q = query(logsRef, where("timestamp", "<", isoThreshold));
       const snapshot = await getDocs(q);
-
       if (!snapshot.empty) {
         const batch = writeBatch(db);
         snapshot.docs.forEach(doc => batch.delete(doc.ref));
         await batch.commit();
-        console.log(`Maintenance: Deleted ${snapshot.size} old audit logs.`);
       }
       hasCleanedLogs.current = true;
     } catch (e) {
@@ -121,7 +114,6 @@ export const useDataStore = () => {
   const handleFirestoreError = (error: any) => {
       const isPermissionError = error.code === 'permission-denied' || 
                                 error.message?.includes('Missing or insufficient permissions');
-
       if (isPermissionError) {
           setPermissionError(true);
       } else {
@@ -140,7 +132,6 @@ export const useDataStore = () => {
       const unsubscribe = onAuthStateChanged(auth, async (user) => {
           setFirebaseUser(user);
           setAuthLoading(false);
-          
           if (!user) {
               setEmployees([]);
               setTeams([]);
@@ -151,6 +142,7 @@ export const useDataStore = () => {
               setTrainings([]);
               setPermissionError(false);
               setUsersLoading(true);
+              setSettingsLoading(true);
               hasCleanedLogs.current = false;
           }
       });
@@ -158,7 +150,6 @@ export const useDataStore = () => {
   }, []);
 
   useEffect(() => {
-    // When users load and we have a current user, check if admin for cleanup
     const me = users.find(u => u.email.toLowerCase() === firebaseUser?.email?.toLowerCase());
     if (me?.role === 'admin' && !hasCleanedLogs.current) {
         cleanupOldLogs();
@@ -269,18 +260,21 @@ export const useDataStore = () => {
     const unsubscribe = onSnapshot(docRef, (docSnap: any) => {
       if (docSnap.exists()) {
         const data = docSnap.data() as AppSettings;
-        // Merge with DEFAULT_SETTINGS but respect local override if it exists
         const localLang = localStorage.getItem('team_lp_lang');
         const finalLang = (localLang === 'fr' || localLang === 'en') 
             ? localLang as 'fr' | 'en' 
             : (data.language || getBrowserLanguage());
         setSettings({ ...DEFAULT_SETTINGS, ...data, language: finalLang });
       } else {
-        setDoc(docRef, DEFAULT_SETTINGS).catch((err: any) => console.log("Init settings failed", err));
+        // IMPORTANT: We do NOT auto-initialize here with setDoc anymore.
+        // This prevents micro-network issues from resetting the DB to defaults.
+        // We just use defaults in the local UI state.
         setSettings(DEFAULT_SETTINGS);
       }
+      setSettingsLoading(false);
     }, (error: any) => {
          console.warn("Settings sync failed:", error.message);
+         setSettingsLoading(false);
     });
     return () => unsubscribe();
   }, [firebaseUser]);
@@ -528,12 +522,11 @@ export const useDataStore = () => {
 
   const updateSettings = async (key: keyof AppSettings, value: any) => {
     try {
-      await updateDoc(doc(db, "config", "settings"), { [key]: value });
+      // Use setDoc with merge to ensure the document exists and is updated safely
+      await setDoc(doc(db, "config", "settings"), { [key]: value }, { merge: true });
       
-      // Personal preference: Save language to localStorage
       if (key === 'language') {
         localStorage.setItem('team_lp_lang', value);
-        // Also update local state immediately
         setSettings(prev => ({ ...prev, language: value }));
       }
       
@@ -645,7 +638,6 @@ export const useDataStore = () => {
       } catch (e) { handleWriteError(e, "deleting training"); }
   };
 
-  // Fix: Add effectiveUsers calculation to handle virtual user state for newly logged-in users.
   const effectiveUsers = useMemo(() => {
     if (!firebaseUser || !firebaseUser.email) return users;
     const exists = users.some(u => u.email.toLowerCase() === firebaseUser.email?.toLowerCase());
@@ -664,7 +656,7 @@ export const useDataStore = () => {
 
   return {
     employees, teams, users: effectiveUsers, settings, planning, bonuses, logs, trainings, notifications,
-    authLoading, usersLoading, permissionError, firebaseUser, login, signUp, resendVerification, logout, notify,
+    authLoading, usersLoading, settingsLoading, permissionError, firebaseUser, login, signUp, resendVerification, logout, notify,
     addEmployee, updateEmployee, deleteEmployee, addTeam, updateTeam, deleteTeam, updateSettings, setPlanningItem,
     addUser, updateUser, deleteUser, setBonus, addTraining, updateTraining, deleteTraining
   };

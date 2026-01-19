@@ -39,7 +39,7 @@ import { TRANSLATIONS } from './constants';
 function App() {
   const { 
     employees, teams, users, settings, planning, bonuses, logs, trainings, notifications,
-    authLoading, usersLoading, firebaseUser, permissionError, login, signUp, logout, resendVerification,
+    authLoading, usersLoading, settingsLoading, firebaseUser, permissionError, login, signUp, logout, resendVerification,
     addEmployee, updateEmployee, deleteEmployee,
     updateSettings, addTeam, updateTeam, deleteTeam,
     setPlanningItem, addUser, updateUser, deleteUser,
@@ -50,18 +50,11 @@ function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCheckingVerification, setIsCheckingVerification] = useState(false);
 
-  // --- STANDARD: Dynamic Language & Title Handling ---
   useEffect(() => {
-    // Update HTML lang attribute for Screen Readers
     document.documentElement.lang = settings.language;
-    // Update Page Title
     document.title = settings.language === 'fr' ? 'Team LP - Gestion' : 'Team LP - Management';
   }, [settings.language]);
 
-  // --- DERIVED STATE (Must be unconditional for hooks) ---
-  
-  // Determine Current User from Firestore "users" collection based on Email
-  // If not found (sync delay or first user), create a safe fallback object
   const dbUser = firebaseUser && firebaseUser.email 
       ? users.find(u => u.email.toLowerCase() === firebaseUser.email?.toLowerCase())
       : null;
@@ -77,32 +70,25 @@ function App() {
 
   const isAdmin = currentUser.role === 'admin';
 
-  // Filter Data based on Role (Must be unconditional hooks)
   const visibleTeams = useMemo(() => {
-    if (!firebaseUser) return []; // Return empty if not logged in to avoid processing
+    if (!firebaseUser) return []; 
     if (isAdmin) return teams;
-    // Find teams led by this user
     return teams.filter(t => t.leaderId === currentUser.employeeId);
   }, [isAdmin, teams, currentUser.employeeId, firebaseUser]);
 
   const visibleEmployees = useMemo(() => {
     if (!firebaseUser) return [];
     if (isAdmin) return employees;
-    // Get IDs of teams led by user
     const ledTeamIds = visibleTeams.map(t => t.id);
-    // Return employees in those teams
     return employees.filter(e => e.teamId && ledTeamIds.includes(e.teamId));
   }, [isAdmin, employees, visibleTeams, firebaseUser]);
 
-  // --- ACTIONS ---
-  
   const handleCheckVerification = async () => {
     if (!auth.currentUser) return;
     setIsCheckingVerification(true);
     try {
         await auth.currentUser.reload();
         if (auth.currentUser.emailVerified) {
-            // Force reload to sync everything cleanly
             window.location.reload();
         } else {
             notify(settings.language === 'fr' ? "Email non vérifié. Veuillez cliquer sur le lien reçu." : "Email not verified yet. Please click the link.", "error");
@@ -114,13 +100,9 @@ function App() {
     }
   };
 
-  // --- CONDITIONAL RENDERING (Early Returns) ---
-  
   const t = TRANSLATIONS[settings.language];
 
-  // Authentication Loading Screen
-  // WAIT for Auth AND Database Users to load to prevent "Pending Approval" flash on admins
-  if (authLoading || (firebaseUser && usersLoading)) {
+  if (authLoading || (firebaseUser && (usersLoading || settingsLoading))) {
      return (
         <div className="h-screen flex items-center justify-center bg-gray-50">
             <Loader2 className="animate-spin text-blue-600" size={48} />
@@ -128,7 +110,6 @@ function App() {
      );
   }
 
-  // Permission Error Screen
   if (permissionError) {
       return (
           <div className="h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
@@ -140,17 +121,6 @@ function App() {
                   <p className="text-gray-600 mb-6">
                       Your user is authenticated, but the Firebase Firestore Security Rules are blocking access to the data.
                   </p>
-                  <div className="bg-gray-100 p-4 rounded text-left text-xs font-mono text-gray-700 mb-6 overflow-x-auto">
-                      <p className="font-bold text-gray-500 mb-2">// Copy this to Firebase Console &gt; Firestore &gt; Rules</p>
-                      <p>rules_version = '2';</p>
-                      <p>service cloud.firestore {'{'}</p>
-                      <p className="pl-4">match /databases/{'{'}database{'}'}/documents {'{'}</p>
-                      <p className="pl-8">match /{"{"}document=**{"}"} {'{'}</p>
-                      <p className="pl-12">allow read, write: if request.auth != null;</p>
-                      <p className="pl-8">{'}'}</p>
-                      <p className="pl-4">{'}'}</p>
-                      <p>{'}'}</p>
-                  </div>
                   <button 
                       onClick={() => window.location.reload()}
                       className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
@@ -168,7 +138,6 @@ function App() {
       );
   }
 
-  // Not Authenticated -> Show Login
   if (!firebaseUser) {
       return (
           <>
@@ -178,7 +147,6 @@ function App() {
       );
   }
 
-  // CHECK 1: EMAIL VERIFICATION
   if (firebaseUser && !firebaseUser.emailVerified) {
       return (
         <>
@@ -222,7 +190,6 @@ function App() {
       );
   }
 
-  // CHECK 2: ADMIN APPROVAL (Active Status)
   if (!currentUser.active) {
       return (
           <div className="h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
@@ -254,7 +221,6 @@ function App() {
     <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
       <Toast notifications={notifications} />
 
-      {/* Mobile Overlay */}
       {isMobileMenuOpen && (
         <div 
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
@@ -262,7 +228,6 @@ function App() {
         />
       )}
 
-      {/* Sidebar */}
       <aside className={`
         fixed lg:static inset-y-0 left-0 z-50 w-64 bg-slate-850 text-white transform transition-transform duration-300 ease-in-out flex flex-col
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
@@ -289,7 +254,6 @@ function App() {
           <NavItem tab="training" icon={GraduationCap} label={t.training} activeTab={activeTab} setActiveTab={setActiveTab} setIsMobileMenuOpen={setIsMobileMenuOpen} />
           <NavItem tab="bonus" icon={Award} label={t.bonus} activeTab={activeTab} setActiveTab={setActiveTab} setIsMobileMenuOpen={setIsMobileMenuOpen} />
           
-          {/* Admin Only Tabs */}
           {isAdmin && (
             <>
               <NavItem tab="users" icon={UserPlus} label={t.users} activeTab={activeTab} setActiveTab={setActiveTab} setIsMobileMenuOpen={setIsMobileMenuOpen} />
@@ -322,9 +286,7 @@ function App() {
         </div>
       </aside>
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Mobile Header */}
         <header className="bg-white border-b border-gray-200 h-16 flex items-center px-4 lg:hidden sticky top-0 z-30">
           <button 
             onClick={() => setIsMobileMenuOpen(true)}
@@ -336,7 +298,6 @@ function App() {
           <span className="ml-4 font-semibold text-gray-800">Team LP</span>
         </header>
 
-        {/* Main Scroll Area */}
         <main className="flex-1 overflow-auto p-4 md:p-8" role="main">
           <div className="max-w-7xl mx-auto">
             {activeTab === 'home' && (
@@ -424,8 +385,8 @@ function App() {
               <Settings 
                 currentUser={currentUser}
                 settings={settings}
-                teams={teams} // Admin needs all teams to check overlaps/management
-                employees={employees} // Admin needs all employees for assignment
+                teams={teams} 
+                employees={employees} 
                 onUpdateSettings={updateSettings}
                 onAddTeam={addTeam}
                 onUpdateTeam={updateTeam}

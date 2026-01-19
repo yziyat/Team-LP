@@ -30,6 +30,7 @@ export interface AbsenceType {
 export interface Holiday {
   date: string; // YYYY-MM-DD
   name: string;
+  type: 'civil' | 'religious';
 }
 
 export interface Team {
