@@ -49,11 +49,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ employees, teams, planning
     return planning[`${empId}_${selectedDate}`];
   };
 
-  // Centralized Holiday Check
+  // Centralized Holiday Check (Recurring civil logic)
   const holidayToday = useMemo(() => {
     return settings.holidays.find(h => {
         if (h.type === 'civil') {
-            return h.date.slice(5) === selectedDate.slice(5);
+            return h.date.substring(5) === selectedDate.substring(5);
         }
         return h.date === selectedDate;
     });
@@ -63,7 +63,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ employees, teams, planning
   const presentEmployees = activeEmployees.filter(emp => {
     const shift = getEmployeeStatus(emp.id);
     const isAbsent = settings.absenceTypes.some(a => a.name === shift) || shift === 'Repos';
-    // If it's a holiday and no specific shift is assigned, they are not "Present"
     return shift && !isAbsent;
   });
   

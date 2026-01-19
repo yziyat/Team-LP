@@ -187,7 +187,7 @@ export const Planning: React.FC<PlanningProps> = ({ employees, teams, settings, 
     return settings.holidays.find(h => {
         if (h.type === 'civil') {
             // Compare only Month and Day (MM-DD)
-            return h.date.slice(5) === dateStr.slice(5);
+            return h.date.substring(5) === dateStr.substring(5);
         }
         // Compare full date for Religious/Variable
         return h.date === dateStr;

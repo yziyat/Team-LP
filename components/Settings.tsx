@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Plus, Trash2, CheckSquare, Square, Globe, Briefcase, Users as UsersIcon, Clock, Edit2, CalendarOff, CalendarDays, List, MapPin, Info, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, CheckSquare, Square, Globe, Briefcase, Users as UsersIcon, Clock, Edit2, CalendarOff, CalendarDays, List, MapPin, Info, ChevronRight, Hash } from 'lucide-react';
 import { AppSettings, Team, Employee, Shift, Holiday, AbsenceType, User } from '../types';
 import { Button } from './ui/Button';
 import { Modal } from './ui/Modal';
@@ -474,7 +474,10 @@ export const Settings: React.FC<SettingsProps> = ({
                     {groupedHolidays.map(([year, list]) => (
                         <div key={year} className="space-y-3">
                             <div className="flex items-center gap-3">
-                                <h4 className="text-lg font-black text-gray-800 border-b-2 border-blue-500 pb-0.5">{year}</h4>
+                                <div className="p-1.5 bg-slate-800 text-white rounded-lg shadow-sm">
+                                    <Hash size={14} />
+                                </div>
+                                <h4 className="text-lg font-black text-slate-800 tracking-tight">{year}</h4>
                                 <div className="h-px flex-1 bg-gray-100"></div>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -487,7 +490,7 @@ export const Settings: React.FC<SettingsProps> = ({
                                             <div className="flex flex-col">
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-xs font-black text-gray-900">{formatDisplayDate(h.date, settings.dateFormat)}</span>
-                                                    <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded ${h.type === 'religious' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                    <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded border ${h.type === 'religious' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-blue-100 text-blue-700 border-blue-200'}`}>
                                                         {h.type === 'religious' ? (settings.language === 'fr' ? 'Religieux' : 'Relig.') : (settings.language === 'fr' ? 'Civile' : 'Civil')}
                                                     </span>
                                                 </div>

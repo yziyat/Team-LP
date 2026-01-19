@@ -266,9 +266,7 @@ export const useDataStore = () => {
             : (data.language || getBrowserLanguage());
         setSettings({ ...DEFAULT_SETTINGS, ...data, language: finalLang });
       } else {
-        // IMPORTANT: We do NOT auto-initialize here with setDoc anymore.
-        // This prevents micro-network issues from resetting the DB to defaults.
-        // We just use defaults in the local UI state.
+        // Doc doesn't exist in cloud, we use defaults locally only.
         setSettings(DEFAULT_SETTINGS);
       }
       setSettingsLoading(false);
@@ -521,6 +519,12 @@ export const useDataStore = () => {
   };
 
   const updateSettings = async (key: keyof AppSettings, value: any) => {
+    // CRITICAL: Block updates if settings are not loaded yet to prevent overwriting with local defaults
+    if (settingsLoading) {
+      console.warn("Update blocked: Settings are still loading from Cloud.");
+      return;
+    }
+
     try {
       // Use setDoc with merge to ensure the document exists and is updated safely
       await setDoc(doc(db, "config", "settings"), { [key]: value }, { merge: true });
